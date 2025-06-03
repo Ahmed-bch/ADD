@@ -184,7 +184,7 @@ def ACM_analysis(df):
         # Fréquence minimale
         min_freq = st.slider(
             "Fréquence minimale des modalités (%)",
-            min_value=0.0, max_value=10.0, value=1.0, step=0.1,
+            min_value=0.0, max_value=10.0, value=0.0, step=0.1,
             help="Modalités avec une fréquence inférieure seront regroupées"
         )
         

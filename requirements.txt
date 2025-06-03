@@ -1,0 +1,12 @@
+streamlit
+statsmodels
+openpyxl
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+scikit-learn
+scipy
+fanalysis
+xlrd

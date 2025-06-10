@@ -1,12 +1,26 @@
-fanalysis
-matplotlib
-matplotlib_venn
-numpy
-pandas
-plotly
-scikit_learn
-scipy
-seaborn
-statsmodels
-streamlit
-sqlite3
+# Core framework
+streamlit>=1.28.0
+
+# Data manipulation and analysis
+pandas>=1.5.0
+numpy>=1.24.0
+
+# Plotting and visualization
+matplotlib>=3.6.0
+seaborn>=0.12.0
+plotly>=5.15.0
+
+# Scientific computing and statistics
+scipy>=1.10.0
+scikit-learn>=1.3.0
+statsmodels>=0.14.0
+
+# Specialized libraries
+fanalysis>=0.2.0
+matplotlib-venn>=0.11.7
+
+# Database (SQLite is included with Python)
+# No additional requirement needed for sqlite3
+
+# Security and utilities (included with Python)
+# hashlib, secrets, datetime, os, io are built-in modules

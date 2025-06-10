@@ -1,20 +1,11 @@
-# Core framework
-streamlit>=1.28.0
-
-# Data manipulation and analysis
-pandas>=1.5.0
-numpy>=1.24.0
-
-# Plotting and visualization
-matplotlib>=3.6.0
-seaborn>=0.12.0
-plotly>=5.15.0
-
-# Scientific computing and statistics
-scipy>=1.10.0
-scikit-learn>=1.3.0
-statsmodels>=0.14.0
-
-# Specialized libraries
-fanalysis
-matplotlib-venn>=0.11.7
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+scipy
+scikit-learn
+statsmodels
+matplotlib-venn
+fanalysis==0.0.1

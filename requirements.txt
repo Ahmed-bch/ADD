@@ -10,4 +10,4 @@ scikit-learn
 scipy
 fanalysis
 xlrd
-sqlite3
+

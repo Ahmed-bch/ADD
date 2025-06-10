@@ -16,5 +16,5 @@ scikit-learn>=1.3.0
 statsmodels>=0.14.0
 
 # Specialized libraries
-fanalysis>=0.2.0
+fanalysis
 matplotlib-venn>=0.11.7

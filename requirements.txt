@@ -9,3 +9,4 @@ scikit-learn
 statsmodels
 matplotlib-venn
 fanalysis==0.0.1
+openpyxl

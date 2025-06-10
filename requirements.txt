@@ -1,6 +1,6 @@
 # Core framework
 streamlit>=1.28.0
-
+warnings
 # Data manipulation and analysis
 pandas>=1.5.0
 numpy>=1.24.0
@@ -19,8 +19,11 @@ statsmodels>=0.14.0
 fanalysis>=0.2.0
 matplotlib-venn>=0.11.7
 
-# Database (SQLite is included with Python)
-# No additional requirement needed for sqlite3
+sqlite3
 
 # Security and utilities (included with Python)
-# hashlib, secrets, datetime, os, io are built-in modules
+hashlib
+secrets
+datetime
+os
+io 

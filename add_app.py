@@ -622,45 +622,60 @@ def add():
 
     def ACP_analysis(df):
         """
-        Fonction d'Analyse en Composantes Principales avec biplot amélioré
+        Fonction d'Analyse en Composantes Principales avec biplot amélioré et tests statistiques
+        Version améliorée avec validation statistique complète
         """
         import warnings
         warnings.filterwarnings('ignore')
         
+        # Imports essentiels
+        import streamlit as st
+        import pandas as pd
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.decomposition import PCA as SklearnPCA
+        from scipy import stats
+        from scipy.stats import pearsonr, bartlett, levene
+        import plotly.express as px
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+        
+        # Configuration du style
+        plt.style.use('default')
+        sns.set_palette("husl")
+        
         # Vérifier si la bibliothèque fanalysis est disponible
+        USE_FANALYSIS = False
         try:
             from fanalysis.pca import PCA
+            USE_FANALYSIS = True
         except ImportError:
-            st.error("❌ La bibliothèque 'fanalysis' n'est pas installée. Installez-la avec: pip install fanalysis")
-            st.info("💡 Alternative: Vous pouvez utiliser sklearn.decomposition.PCA pour une version simplifiée de l'ACP")
-            return
+            st.warning("⚠️ La bibliothèque 'fanalysis' n'est pas disponible. Utilisation de sklearn avec fonctionnalités étendues.")
         
-        from scipy.stats import pearsonr
-        from sklearn.preprocessing import StandardScaler
-        import matplotlib.pyplot as plt
-        import numpy as np
-        import pandas as pd
-        import seaborn as sns
-        
-        st.header("🔍 Analyse en Composantes Principales (ACP)")
-        st.markdown("Analysez les relations entre variables quantitatives et réduisez la dimensionnalité")
+        st.header("🔍 Analyse en Composantes Principales (ACP) Avancée")
+        st.markdown("Analysez les relations entre variables quantitatives avec validation statistique complète")
         
         if df.empty:
-            st.warning("⚠️ Aucune donnée disponible")
+            st.error("❌ Aucune donnée disponible")
             return
         
-        # Configuration en colonnes
+        # ==================== SECTION CONFIGURATION ====================
+        st.markdown("## ⚙️ Configuration de l'analyse")
+        
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.subheader("⚙️ Configuration")
+            st.subheader("Paramètres généraux")
             
             # Gestion des valeurs manquantes
             missing_method = st.selectbox(
                 "Gestion des valeurs manquantes:",
-                ["Supprimer les lignes", "Remplacer par moyenne", "Remplacer par médiane", "Ne rien faire"],
+                ["Supprimer les lignes", "Remplacer par moyenne", "Remplacer par médiane", 
+                "Interpolation linéaire", "Ne rien faire"],
                 key="acp_missing_method",
-                help="Choisissez comment traiter les valeurs manquantes"
+                help="Méthode pour traiter les valeurs manquantes"
             )
             
             # Standardisation
@@ -669,6 +684,14 @@ def add():
                 value=True,
                 key="acp_standardize",
                 help="Recommandé quand les variables ont des unités différentes"
+            )
+            
+            # Tests statistiques
+            run_statistical_tests = st.checkbox(
+                "Exécuter les tests statistiques",
+                value=True,
+                key="acp_run_tests",
+                help="Tests de normalité, homoscédasticité, etc."
             )
             
             # Index personnalisé
@@ -686,38 +709,50 @@ def add():
             st.write("**Premières lignes:**")
             st.dataframe(df.head())
             
-            # Informations sur les données
+            # Informations détaillées sur les données
             info_data = {
                 'Type': df.dtypes.astype(str),
                 'Valeurs manquantes': df.isnull().sum(),
-                '% manquantes': (df.isnull().sum() / len(df) * 100).round(2)
+                '% manquantes': (df.isnull().sum() / len(df) * 100).round(2),
+                'Valeurs uniques': df.nunique(),
+                'Min': df.select_dtypes(include=[np.number]).min(),
+                'Max': df.select_dtypes(include=[np.number]).max()
             }
             info_df = pd.DataFrame(info_data)
             with st.expander("Informations détaillées"):
                 st.dataframe(info_df)
         
-        # Préprocessing des données
+        # ==================== PRÉPROCESSING ====================
         df_processed = df.copy()
         
         # Appliquer l'index personnalisé
         if use_custom_index and 'index_col' in locals():
             df_processed.set_index(index_col, inplace=True)
-            st.info(f"Index défini sur la colonne: {index_col}")
+            st.info(f"✅ Index défini sur la colonne: {index_col}")
         
         # Traitement des valeurs manquantes
+        missing_before = df_processed.isnull().sum().sum()
+        
         if missing_method == "Supprimer les lignes":
             df_processed = df_processed.dropna()
-            st.info(f"Lignes supprimées: {len(df) - len(df_processed)}")
+            st.info(f"📉 Lignes supprimées: {len(df) - len(df_processed)}")
         elif missing_method == "Remplacer par moyenne":
             numeric_cols = df_processed.select_dtypes(include=[np.number]).columns
             df_processed[numeric_cols] = df_processed[numeric_cols].fillna(df_processed[numeric_cols].mean())
         elif missing_method == "Remplacer par médiane":
             numeric_cols = df_processed.select_dtypes(include=[np.number]).columns
             df_processed[numeric_cols] = df_processed[numeric_cols].fillna(df_processed[numeric_cols].median())
+        elif missing_method == "Interpolation linéaire":
+            numeric_cols = df_processed.select_dtypes(include=[np.number]).columns
+            df_processed[numeric_cols] = df_processed[numeric_cols].interpolate(method='linear')
         
-        # Sélection des variables
+        missing_after = df_processed.isnull().sum().sum()
+        if missing_before > 0:
+            st.info(f"📊 Valeurs manquantes traitées: {missing_before} → {missing_after}")
+        
+        # ==================== SÉLECTION DES VARIABLES ====================
         st.markdown("---")
-        st.subheader("📋 Sélection des variables")
+        st.subheader("📋 Sélection et validation des variables")
         
         # Détecter automatiquement les variables numériques
         numeric_cols = df_processed.select_dtypes(include=[np.number]).columns.tolist()
@@ -735,16 +770,22 @@ def add():
                 options=numeric_cols,
                 default=numeric_cols[:min(10, len(numeric_cols))],
                 key="acp_vars_selected",
-                help="Sélectionnez les variables numériques"
+                help="Sélectionnez les variables numériques (max 20 recommandé)"
             )
+            
+            if len(vars_selected) > 20:
+                st.warning("⚠️ Plus de 20 variables peut ralentir l'analyse")
         
         with col2:
             if vars_selected:
                 st.write("**Variables sélectionnées:**")
-                for var in vars_selected:
+                for var in vars_selected[:10]:  # Limiter l'affichage
                     min_val = df_processed[var].min()
                     max_val = df_processed[var].max()
-                    st.write(f"• {var}: {min_val:.2f} à {max_val:.2f}")
+                    std_val = df_processed[var].std()
+                    st.write(f"• {var}: [{min_val:.2f}, {max_val:.2f}] (σ={std_val:.2f})")
+                if len(vars_selected) > 10:
+                    st.write(f"... et {len(vars_selected) - 10} autres variables")
         
         if len(vars_selected) < 2:
             st.warning("⚠️ Veuillez sélectionner au moins 2 variables")
@@ -753,12 +794,90 @@ def add():
         # Créer le dataset final
         X = df_processed[vars_selected].copy()
         
-        # Vérifier qu'il n'y a que des valeurs numériques
-        if not X.select_dtypes(include=[np.number]).shape[1] == X.shape[1]:
-            st.error("❌ Toutes les variables sélectionnées doivent être numériques")
-            return
+        # ==================== TESTS STATISTIQUES PRÉLIMINAIRES ====================
+        if run_statistical_tests:
+            st.markdown("---")
+            st.subheader("🧪 Tests statistiques préliminaires")
+            
+            # Test de normalité (Shapiro-Wilk pour échantillons < 5000, sinon Kolmogorov-Smirnov)
+            normality_results = {}
+            for col in X.columns:
+                data = X[col].dropna()
+                if len(data) < 5000:
+                    stat, p_value = stats.shapiro(data)
+                    test_name = "Shapiro-Wilk"
+                else:
+                    stat, p_value = stats.kstest(data, 'norm', args=(data.mean(), data.std()))
+                    test_name = "Kolmogorov-Smirnov"
+                
+                normality_results[col] = {
+                    'test': test_name,
+                    'statistic': stat,
+                    'p_value': p_value,
+                    'is_normal': p_value > 0.05
+                }
+            
+            # Affichage des résultats de normalité
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Tests de normalité:**")
+                normal_count = sum(1 for r in normality_results.values() if r['is_normal'])
+                total_count = len(normality_results)
+                st.metric("Variables normales", f"{normal_count}/{total_count}")
+                
+                # Graphique de distribution
+                fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+                axes = axes.ravel()
+                
+                for i, col in enumerate(X.columns[:4]):  # Montrer les 4 premières
+                    if i < len(axes):
+                        axes[i].hist(X[col], bins=30, alpha=0.7, density=True)
+                        axes[i].set_title(f'{col}\n(Normal: {normality_results[col]["is_normal"]})')
+                        
+                        # Ajouter courbe normale théorique
+                        x_norm = np.linspace(X[col].min(), X[col].max(), 100)
+                        y_norm = stats.norm.pdf(x_norm, X[col].mean(), X[col].std())
+                        axes[i].plot(x_norm, y_norm, 'r-', alpha=0.8)
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+            
+            with col2:
+                st.write("**Détails des tests:**")
+                normality_df = pd.DataFrame(normality_results).T
+                normality_df = normality_df.round(4)
+                st.dataframe(normality_df)
+            
+            # Test d'homoscédasticité (Bartlett et Levene)
+            if len(X.columns) > 2:
+                st.write("**Tests d'homoscédasticité:**")
+                try:
+                    # Test de Bartlett (assume normalité)
+                    bartlett_stat, bartlett_p = bartlett(*[X[col].dropna() for col in X.columns])
+                    
+                    # Test de Levene (plus robuste)
+                    levene_stat, levene_p = levene(*[X[col].dropna() for col in X.columns])
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Test de Bartlett", f"p = {bartlett_p:.4f}")
+                        if bartlett_p > 0.05:
+                            st.success("✅ Variances homogènes (Bartlett)")
+                        else:
+                            st.warning("⚠️ Variances hétérogènes (Bartlett)")
+                    
+                    with col2:
+                        st.metric("Test de Levene", f"p = {levene_p:.4f}")
+                        if levene_p > 0.05:
+                            st.success("✅ Variances homogènes (Levene)")
+                        else:
+                            st.warning("⚠️ Variances hétérogènes (Levene)")
+                            
+                except Exception as e:
+                    st.warning(f"Impossible d'effectuer les tests d'homoscédasticité: {e}")
         
-        # Standardisation
+        # ==================== STANDARDISATION ====================
         if standardize:
             scaler = StandardScaler()
             X_scaled = pd.DataFrame(
@@ -767,24 +886,158 @@ def add():
                 index=X.index
             )
             X = X_scaled
-            st.info("✅ Données standardisées")
+            st.success("✅ Données standardisées (moyenne=0, écart-type=1)")
         
-        # Paramètres
-        col1, col2 = st.columns(2)
+        # ==================== ANALYSE DES CORRÉLATIONS ====================
+        st.markdown("---")
+        st.subheader("📈 Analyse des corrélations")
+        
+        # Calcul de la matrice de corrélation
+        correlation_matrix = X.corr()
+        
+        # Visualisation interactive avec Plotly
+        fig_corr = go.Figure(data=go.Heatmap(
+            z=correlation_matrix.values,
+            x=correlation_matrix.columns,
+            y=correlation_matrix.columns,
+            colorscale='RdBu',
+            zmid=0,
+            text=correlation_matrix.round(3).values,
+            texttemplate="%{text}",
+            textfont={"size": 10},
+            hoverongaps=False
+        ))
+        
+        fig_corr.update_layout(
+            title="Matrice de corrélation interactive",
+            xaxis_title="Variables",
+            yaxis_title="Variables",
+            height=600
+        )
+        
+        st.plotly_chart(fig_corr, use_container_width=True)
+        
+        # Métriques de corrélation
+        mean_correlation = correlation_matrix.abs().mean().mean()
+        strong_correlations = (correlation_matrix.abs() > 0.7).sum().sum() - len(vars_selected)
+        very_strong_correlations = (correlation_matrix.abs() > 0.9).sum().sum() - len(vars_selected)
+        
+        col1, col2, col3 = st.columns(3)
         with col1:
-            n_components = st.slider("Nombre de composantes", 2, min(10, len(vars_selected)), min(5, len(vars_selected)), key="acp_n_components")
+            st.metric("Corrélation moyenne", f"{mean_correlation:.3f}")
         with col2:
-            fig_size = st.slider("Taille des graphiques", 6, 12, 8, key="acp_fig_size")
+            st.metric("Corrélations fortes (>0.7)", strong_correlations)
+        with col3:
+            st.metric("Corrélations très fortes (>0.9)", very_strong_correlations)
         
+        # Test d'adéquation pour l'ACP avec critères multiples
+        st.markdown("---")
+        st.subheader("🎯 Adéquation des données pour l'ACP")
+        
+        # Critère de corrélation
+        if mean_correlation > 0.6:
+            corr_adequacy = "Excellente"
+            corr_color = "🟢"
+        elif mean_correlation > 0.4:
+            corr_adequacy = "Bonne"
+            corr_color = "🟡"
+        elif mean_correlation > 0.2:
+            corr_adequacy = "Moyenne"
+            corr_color = "🟠"
+        else:
+            corr_adequacy = "Faible"
+            corr_color = "🔴"
+        
+        # Test KMO (Kaiser-Meyer-Olkin) approximatif
+        def calculate_kmo_approx(corr_matrix):
+            """Calcul approximatif du KMO"""
+            corr_inv = np.linalg.pinv(corr_matrix)
+            partial_corr = np.zeros_like(corr_matrix)
+            
+            for i in range(len(corr_matrix)):
+                for j in range(len(corr_matrix)):
+                    if i != j:
+                        partial_corr[i, j] = -corr_inv[i, j] / np.sqrt(corr_inv[i, i] * corr_inv[j, j])
+            
+            sum_corr_sq = np.sum(corr_matrix**2) - np.trace(corr_matrix**2)
+            sum_partial_sq = np.sum(partial_corr**2)
+            
+            kmo = sum_corr_sq / (sum_corr_sq + sum_partial_sq)
+            return kmo
+        
+        try:
+            kmo_value = calculate_kmo_approx(correlation_matrix.values)
+            if kmo_value > 0.8:
+                kmo_adequacy = "Excellent"
+                kmo_color = "🟢"
+            elif kmo_value > 0.7:
+                kmo_adequacy = "Bon"
+                kmo_color = "🟡"
+            elif kmo_value > 0.6:
+                kmo_adequacy = "Moyen"
+                kmo_color = "🟠"
+            else:
+                kmo_adequacy = "Insuffisant"
+                kmo_color = "🔴"
+        except:
+            kmo_value = None
+            kmo_adequacy = "Non calculable"
+            kmo_color = "⚪"
+        
+        # Affichage des critères d'adéquation
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"**Corrélation moyenne:** {corr_color} {corr_adequacy}")
+            st.write(f"Valeur: {mean_correlation:.3f}")
+        
+        with col2:
+            if kmo_value:
+                st.markdown(f"**Test KMO (approx.):** {kmo_color} {kmo_adequacy}")
+                st.write(f"Valeur: {kmo_value:.3f}")
+            else:
+                st.markdown("**Test KMO:** ⚪ Non calculable")
+        
+        with col3:
+            # Déterminant de la matrice de corrélation
+            det_corr = np.linalg.det(correlation_matrix)
+            if det_corr < 0.00001:
+                det_adequacy = "Multicolinéarité détectée"
+                det_color = "🔴"
+            else:
+                det_adequacy = "Acceptable"
+                det_color = "🟢"
+            
+            st.markdown(f"**Déterminant:** {det_color} {det_adequacy}")
+            st.write(f"Valeur: {det_corr:.2e}")
+        
+        # ==================== PARAMÈTRES ACP ====================
+        st.markdown("---")
+        st.subheader("⚙️ Paramètres de l'ACP")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_components = st.slider(
+                "Nombre de composantes", 
+                2, 
+                min(len(vars_selected), len(X)), 
+                min( len(X), len(vars_selected)), 
+                key="acp_n_components"
+            )
+        with col2:
+            fig_size = st.slider("Taille des graphiques", 6, 15, 10, key="acp_fig_size")
+        with col3:
+            use_plotly = st.checkbox("Graphiques interactifs (Plotly)", value=True, key="acp_use_plotly")
+        
+        # ==================== EXÉCUTION DE L'ACP ====================
         st.markdown("---")
         
-        # Bouton pour lancer l'analyse
-        if st.button("🚀 Lancer l'Analyse ACP", type="primary", key="acp_launch_button"):
+        if st.button("🚀 Lancer l'Analyse ACP Complète", type="primary", key="acp_launch_button"):
             
-            # Affichage des données finales
-            st.subheader("✅ Données préparées")
+            # Données finales
+            st.subheader("✅ Données préparées pour l'ACP")
+            
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.write("**Aperçu final:**")
                 st.dataframe(X.head())
@@ -794,84 +1047,110 @@ def add():
                 desc_stats = X.describe().round(3)
                 st.dataframe(desc_stats)
             
-            # Tests statistiques préliminaires
-            st.markdown("---")
-            st.subheader("📈 Analyse des corrélations")
-            
-            # Matrice de corrélation
-            correlation_matrix = X.corr()
-            
-            # Visualisation de la matrice de corrélation
-            fig, ax = plt.subplots(figsize=(fig_size, fig_size))
-            mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
-            sns.heatmap(correlation_matrix, 
-                    mask=mask,
-                    annot=True, 
-                    cmap='coolwarm', 
-                    center=0,
-                    square=True,
-                    ax=ax)
-            plt.title("Matrice de corrélation", fontsize=14)
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Analyse de la corrélation moyenne
-            mean_correlation = correlation_matrix.abs().mean().mean()
-            strong_correlations = (correlation_matrix.abs() > 0.7).sum().sum() - len(vars_selected)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Corrélation moyenne", f"{mean_correlation:.3f}")
-            with col2:
-                st.metric("Corrélations fortes (>0.7)", strong_correlations)
-            
-            # Test d'adéquation pour l'ACP
-            st.markdown("---")
-            st.subheader("🧪 Adéquation des données pour l'ACP")
-            
-            if mean_correlation > 0.5:
-                adequacy = "Excellente"
-                color = "🟢"
-            elif mean_correlation > 0.3:
-                adequacy = "Bonne"
-                color = "🟡"
-            else:
-                adequacy = "Faible"
-                color = "🔴"
-            
-            st.markdown(f"**Adéquation:** {color} {adequacy} (Corrélation moyenne: {mean_correlation:.3f})")
-            
             # Exécution de l'ACP
-            st.markdown("---")
-            st.subheader("🎯 Résultats de l'ACP")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
             try:
-                # Exécution ACP
-                acp = PCA(row_labels=X.index.values, col_labels=X.columns.values, n_components=n_components)
-                acp.fit(X.values)
+                # Choix de la méthode ACP
+                if USE_FANALYSIS:
+                    status_text.text("Utilisation de fanalysis PCA...")
+                    progress_bar.progress(20)
+                    
+                    acp = PCA(
+                        row_labels=X.index.values, 
+                        col_labels=X.columns.values, 
+                        n_components=n_components
+                    )
+                    acp.fit(X.values)
+                    
+                    eigenvalues = acp.eig_[1]
+                    variance_explained = (eigenvalues / eigenvalues.sum()) * 100
+                    cumulative_variance = np.cumsum(variance_explained)
+                    
+                else:
+                    status_text.text("Utilisation de sklearn PCA...")
+                    progress_bar.progress(20)
+                    
+                    # ACP avec sklearn
+                    pca_sklearn = SklearnPCA(n_components=n_components)
+                    X_transformed = pca_sklearn.fit_transform(X)
+                    
+                    eigenvalues = pca_sklearn.explained_variance_
+                    variance_explained = pca_sklearn.explained_variance_ratio_ * 100
+                    cumulative_variance = np.cumsum(variance_explained)
+                    
+                    # Créer des objets compatibles pour la suite
+                    components = pca_sklearn.components_
+                    
+                progress_bar.progress(40)
                 
-                # Valeurs propres
-                st.subheader("📊 Valeurs propres et variance")
+                # ==================== RÉSULTATS PRINCIPAUX ====================
+                st.markdown("---")
+                st.subheader("🎯 Résultats de l'ACP")
                 
+                # Valeurs propres et variance
+                st.subheader("📊 Valeurs propres et variance expliquée")
+                
+                # Graphiques des valeurs propres
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    fig_eigenvalues = acp.plot_eigenvalues()
-                    plt.title("Valeurs propres", fontsize=12)
-                    plt.tight_layout()
-                    st.pyplot(fig_eigenvalues)
+                    if use_plotly:
+                        fig_eigen = go.Figure()
+                        fig_eigen.add_trace(go.Bar(
+                            x=[f'PC{i+1}' for i in range(len(eigenvalues))],
+                            y=eigenvalues,
+                            name='Valeurs propres',
+                            marker_color='lightblue'
+                        ))
+                        fig_eigen.add_hline(y=1, line_dash="dash", line_color="red", 
+                                        annotation_text="Critère de Kaiser")
+                        fig_eigen.update_layout(title="Valeurs propres", height=400)
+                        st.plotly_chart(fig_eigen, use_container_width=True)
+                    else:
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        bars = ax.bar(range(len(eigenvalues)), eigenvalues, alpha=0.7)
+                        ax.axhline(y=1, color='red', linestyle='--', label='Critère de Kaiser')
+                        ax.set_xlabel('Composantes')
+                        ax.set_ylabel('Valeurs propres')
+                        ax.set_title('Valeurs propres')
+                        ax.set_xticks(range(len(eigenvalues)))
+                        ax.set_xticklabels([f'PC{i+1}' for i in range(len(eigenvalues))])
+                        ax.legend()
+                        plt.tight_layout()
+                        st.pyplot(fig)
                 
                 with col2:
-                    fig_cumulative = acp.plot_eigenvalues("cumulative")
-                    plt.title("Variance cumulée", fontsize=12)
-                    plt.tight_layout()
-                    st.pyplot(fig_cumulative)
+                    if use_plotly:
+                        fig_cum = go.Figure()
+                        fig_cum.add_trace(go.Scatter(
+                            x=[f'PC{i+1}' for i in range(len(cumulative_variance))],
+                            y=cumulative_variance,
+                            mode='lines+markers',
+                            name='Variance cumulée',
+                            line=dict(color='orange', width=3)
+                        ))
+                        fig_cum.add_hline(y=80, line_dash="dash", line_color="green", 
+                                        annotation_text="80% de variance")
+                        fig_cum.update_layout(title="Variance cumulée (%)", height=400)
+                        st.plotly_chart(fig_cum, use_container_width=True)
+                    else:
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        ax.plot(range(len(cumulative_variance)), cumulative_variance, 'o-', linewidth=2)
+                        ax.axhline(y=80, color='green', linestyle='--', label='80% variance')
+                        ax.set_xlabel('Composantes')
+                        ax.set_ylabel('Variance cumulée (%)')
+                        ax.set_title('Variance cumulée')
+                        ax.set_xticks(range(len(cumulative_variance)))
+                        ax.set_xticklabels([f'PC{i+1}' for i in range(len(cumulative_variance))])
+                        ax.legend()
+                        plt.tight_layout()
+                        st.pyplot(fig)
                 
-                # Tableau des valeurs propres
-                eigenvalues = acp.eig_[1]
-                variance_explained = (eigenvalues / eigenvalues.sum()) * 100
-                cumulative_variance = np.cumsum(variance_explained)
+                progress_bar.progress(60)
                 
+                # Tableau détaillé des valeurs propres
                 eigenvalues_df = pd.DataFrame({
                     'Composante': [f'PC{i+1}' for i in range(len(eigenvalues))],
                     'Valeur propre': eigenvalues.round(4),
@@ -882,25 +1161,35 @@ def add():
                 st.write("**Tableau des valeurs propres:**")
                 st.dataframe(eigenvalues_df, use_container_width=True)
                 
-                # Critère de Kaiser
+                # Critères de sélection des composantes
                 kaiser_threshold = 1.0
-                significant_kaiser = eigenvalues > kaiser_threshold
-                st.info(f"Critère de Kaiser (valeur propre > 1): {sum(significant_kaiser)} composantes significatives")
-                
-                # Critère du coude
+                significant_kaiser = sum(eigenvalues > kaiser_threshold)
                 variance_80 = sum(cumulative_variance <= 80)
-                st.info(f"Nombre de composantes pour 80% de variance: {variance_80}")
+                variance_90 = sum(cumulative_variance <= 90)
                 
-                # Sélection des axes pour visualisation
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Critère de Kaiser (>1)", f"{significant_kaiser} composantes")
+                with col2:
+                    st.metric("80% de variance", f"{variance_80} composantes")
+                with col3:
+                    st.metric("90% de variance", f"{variance_90} composantes")
+                
+                progress_bar.progress(80)
+                
+                # ==================== VISUALISATIONS INTERACTIVES ====================
                 st.markdown("---")
-                st.subheader("📈 Visualisations")
+                st.subheader("📈 Visualisations interactives")
                 
+                # Sélection des axes
                 col1, col2 = st.columns(2)
                 with col1:
-                    axis_x = st.selectbox("Axe X", [f"PC{i+1}" for i in range(n_components)], index=0, key="acp_axis_x")
+                    axis_x = st.selectbox("Axe X", [f"PC{i+1}" for i in range(n_components)], 
+                                        index=0, key="acp_axis_x_viz")
                     num_x_axis = int(axis_x[2:])
                 with col2:
-                    axis_y = st.selectbox("Axe Y", [f"PC{i+1}" for i in range(n_components)], index=1, key="acp_axis_y")
+                    axis_y = st.selectbox("Axe Y", [f"PC{i+1}" for i in range(n_components)], 
+                                        index=1, key="acp_axis_y_viz")
                     num_y_axis = int(axis_y[2:])
                 
                 # Graphiques principaux
@@ -916,7 +1205,7 @@ def add():
                 
                 with tab2:
                     st.write("**Cercle des corrélations**")
-                    fig_cols = acp.mapping_col(num_x_axis=num_x_axis, num_y_axis=num_y_axis,
+                    fig_cols = acp.correlation_circle(num_x_axis=num_x_axis, num_y_axis=num_y_axis,
                                             figsize=(fig_size, fig_size))
                     plt.title(f"Cercle des corrélations - Plan PC{num_x_axis}-PC{num_y_axis}", fontsize=14)
                     plt.tight_layout()
@@ -1195,8 +1484,6 @@ def add():
         
         else:
             st.info("👆 Configurez vos paramètres et cliquez sur 'Lancer l'Analyse ACP' pour commencer")
-    
-    
 
     def ACM_analysis(df):
         """

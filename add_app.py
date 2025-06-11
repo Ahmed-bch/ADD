@@ -545,7 +545,7 @@ def add():
 
                 # Display tabs for different analyses
                 tabs = st.tabs(["📋 Data Overview", "📊 Descriptive Statistics", "📈 Visualizations",
-                    "🔥 Correlation Analysis", "📉 Advanced Analysis", "🔄 AFC","ACM","ACP"])
+                    "🔥 Correlation Analysis","Clustering ", "📉 Advanced Analysis", "🔄 AFC","ACM","ACP"])
 
                 with tabs[0]:
                     data_overview(df)
@@ -560,12 +560,16 @@ def add():
                     correlation_analysis(df)
 
                 with tabs[4]:
-                    advanced_analysis(df)
+                    k_means_analysis(df)
+                    
                 with tabs[5]:
-                    AFC_analysis(df)
+                    advanced_analysis(df)
+                
                 with tabs[6]:
-                    ACM_analysis(df)
+                    AFC_analysis(df)
                 with tabs[7]:
+                    ACM_analysis(df)
+                with tabs[8]:
                     ACP_analysis(df)
 
             except Exception as e:
@@ -597,7 +601,7 @@ def add():
 
                 # Display tabs for different analyses
                 tabs = st.tabs(["📋 Data Overview", "📊 Descriptive Statistics", "📈 Visualizations",
-                                "🔥 Correlation Analysis", "📉 Advanced Analysis", "🔄 AFC","ACM","ACP"])
+                                "🔥 Correlation Analysis","Clustering ", "📉 Advanced Analysis", "🔄 AFC","ACM","ACP"])
 
                 with tabs[0]:
                     data_overview(df)
@@ -614,11 +618,703 @@ def add():
                 with tabs[4]:
                     advanced_analysis(df)
                 with tabs[5]:
-                    AFC_analysis(df)
+                    k_means_analysis(df)
                 with tabs[6]:
-                    ACM_analysis(df)
+                    AFC_analysis(df)
                 with tabs[7]:
+                    ACM_analysis(df)
+                with tabs[8]:
                     ACP_analysis(df)
+
+    # Analyse des clusters - Comparaison des deux méthodes
+    st.subheader("📋 Analyse comparative des Clusters")
+
+    # Sélection de l'algorithme à analyser
+    analysis_algorithm = st.selectbox(
+        "Analyser les clusters de:",
+        ["K-means", "CAH", "Comparaison"],
+        index=2,
+        key="analysis_algo"
+    )
+    def k_means_analysis(df):
+        """
+        Fonction complète d'analyse K-means et CAH avec interface Streamlit
+        """
+        st.header("🎯 Analyse de Clustering : K-means vs CAH")
+        
+        # Sélection des colonnes numériques
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_cols) < 2:
+            st.warning("⚠️ Vous avez besoin d'au moins 2 colonnes numériques pour effectuer l'analyse de clustering.")
+            return
+        
+        # Interface utilisateur
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("📊 Configuration de l'analyse")
+            selected_features = st.multiselect(
+                "Sélectionnez les variables pour le clustering:",
+                numeric_cols,
+                default=numeric_cols[:min(4, len(numeric_cols))]
+            )
+        
+        with col2:
+            st.subheader("⚙️ Paramètres")
+            max_clusters = st.slider("Nombre maximum de clusters à tester:", 2, 10, 8)
+            normalize_data = st.checkbox("Normaliser les données", value=True)
+            random_state = st.number_input("Graine aléatoire:", value=42, min_value=0)
+            
+            # Paramètres CAH
+            st.subheader("🌳 Paramètres CAH")
+            linkage_method = st.selectbox("Méthode de liaison:", 
+                                        ['ward', 'complete', 'average', 'single'], 
+                                        index=0)
+        
+        if len(selected_features) < 2:
+            st.warning("⚠️ Veuillez sélectionner au moins 2 variables.")
+            return
+        
+        # Bouton d'exécution
+        if not st.button("🚀 Lancer l'analyse de clustering", type="primary"):
+            st.info("👆 Cliquez sur le bouton ci-dessus pour lancer l'analyse.")
+            return
+        
+        # Préparation des données
+        X = df[selected_features].copy()
+        
+        # Gestion des valeurs manquantes
+        if X.isnull().sum().sum() > 0:
+            st.warning("⚠️ Valeurs manquantes détectées. Remplacement par la médiane.")
+            X = X.fillna(X.median())
+        
+        # Normalisation
+        if normalize_data:
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            X_scaled = pd.DataFrame(X_scaled, columns=selected_features)
+        else:
+            X_scaled = X
+        
+        # Import des bibliothèques nécessaires
+        from sklearn.cluster import KMeans, AgglomerativeClustering
+        from sklearn.metrics import silhouette_score, calinski_harabasz_score
+        from scipy.cluster.hierarchy import dendrogram, linkage
+        from scipy.spatial.distance import pdist
+        
+        # Méthode du coude et score de silhouette pour K-means et CAH
+        st.subheader("📈 Détermination du nombre optimal de clusters")
+        
+        # Créer deux colonnes pour K-means et CAH
+        col_kmeans, col_cah = st.columns(2)
+        
+        with col_kmeans:
+            st.write("### 🎯 K-means")
+        with col_cah:
+            st.write("### 🌳 CAH (Classification Ascendante Hiérarchique)")
+        
+        with st.spinner("Calcul en cours..."):
+            # Métriques K-means
+            kmeans_inertias = []
+            kmeans_silhouette_scores = []
+            kmeans_calinski_scores = []
+            
+            # Métriques CAH
+            cah_silhouette_scores = []
+            cah_calinski_scores = []
+            
+            k_range = range(2, max_clusters + 1)
+            
+            for k in k_range:
+                # K-means
+                kmeans = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+                kmeans_labels = kmeans.fit_predict(X_scaled)
+                
+                kmeans_inertias.append(kmeans.inertia_)
+                kmeans_silhouette_scores.append(silhouette_score(X_scaled, kmeans_labels))
+                kmeans_calinski_scores.append(calinski_harabasz_score(X_scaled, kmeans_labels))
+                
+                # CAH
+                cah = AgglomerativeClustering(n_clusters=k, linkage=linkage_method)
+                cah_labels = cah.fit_predict(X_scaled)
+                
+                cah_silhouette_scores.append(silhouette_score(X_scaled, cah_labels))
+                cah_calinski_scores.append(calinski_harabasz_score(X_scaled, cah_labels))
+        
+        # Visualisation des métriques - Comparaison K-means vs CAH
+        st.subheader("📊 Comparaison des métriques K-means vs CAH")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            fig_elbow = plt.figure(figsize=(10, 6))
+            plt.plot(k_range, kmeans_inertias, 'bo-', markersize=8, linewidth=2, label='K-means (Inertie)')
+            plt.title('Méthode du Coude (K-means uniquement)', fontsize=14, fontweight='bold')
+            plt.xlabel('Nombre de clusters (k)')
+            plt.ylabel('Inertie')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            st.pyplot(fig_elbow)
+            plt.close()
+        
+        with col2:
+            fig_silhouette = plt.figure(figsize=(10, 6))
+            plt.plot(k_range, kmeans_silhouette_scores, 'bo-', markersize=8, linewidth=2, label='K-means')
+            plt.plot(k_range, cah_silhouette_scores, 'ro-', markersize=8, linewidth=2, label='CAH')
+            plt.title('Score de Silhouette', fontsize=14, fontweight='bold')
+            plt.xlabel('Nombre de clusters (k)')
+            plt.ylabel('Score de Silhouette')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            st.pyplot(fig_silhouette)
+            plt.close()
+        
+        with col3:
+            fig_calinski = plt.figure(figsize=(10, 6))
+            plt.plot(k_range, kmeans_calinski_scores, 'bo-', markersize=8, linewidth=2, label='K-means')
+            plt.plot(k_range, cah_calinski_scores, 'ro-', markersize=8, linewidth=2, label='CAH')
+            plt.title('Score de Calinski-Harabasz', fontsize=14, fontweight='bold')
+            plt.xlabel('Nombre de clusters (k)')
+            plt.ylabel('Score CH')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            st.pyplot(fig_calinski)
+            plt.close()
+        
+        # Dendrogramme pour CAH
+        st.subheader("🌳 Dendrogramme CAH")
+        
+        # Calculer la matrice de liaison
+        linkage_matrix = linkage(X_scaled, method=linkage_method)
+        
+        fig_dendro = plt.figure(figsize=(12, 8))
+        dendrogram(linkage_matrix, 
+                truncate_mode='lastp',
+                p=30,
+                leaf_rotation=90,
+                leaf_font_size=10,
+                show_contracted=True)
+        plt.title(f'Dendrogramme CAH (Méthode: {linkage_method})', fontsize=14, fontweight='bold')
+        plt.xlabel('Échantillons ou (taille du cluster)')
+        plt.ylabel('Distance')
+        st.pyplot(fig_dendro)
+        plt.close()
+        
+        # Recommandations automatiques
+        optimal_k_kmeans_silhouette = k_range[np.argmax(kmeans_silhouette_scores)]
+        optimal_k_kmeans_calinski = k_range[np.argmax(kmeans_calinski_scores)]
+        optimal_k_cah_silhouette = k_range[np.argmax(cah_silhouette_scores)]
+        optimal_k_cah_calinski = k_range[np.argmax(cah_calinski_scores)]
+        
+        st.info(f"🎯 **Recommandations automatiques:**\n"
+                f"**K-means:**\n"
+                f"- Meilleur score de Silhouette: k = {optimal_k_kmeans_silhouette}\n"
+                f"- Meilleur score de Calinski-Harabasz: k = {optimal_k_kmeans_calinski}\n\n"
+                f"**CAH:**\n"
+                f"- Meilleur score de Silhouette: k = {optimal_k_cah_silhouette}\n"
+                f"- Meilleur score de Calinski-Harabasz: k = {optimal_k_cah_calinski}")
+        
+        # Sélection du nombre de clusters
+        st.subheader("🎯 Application des algorithmes de clustering")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            n_clusters_kmeans = st.selectbox(
+                "Nombre de clusters pour K-means:",
+                k_range,
+                index=k_range.index(optimal_k_kmeans_silhouette),
+                key="kmeans_clusters"
+            )
+        
+        with col2:
+            n_clusters_cah = st.selectbox(
+                "Nombre de clusters pour CAH:",
+                k_range,
+                index=k_range.index(optimal_k_cah_silhouette),
+                key="cah_clusters"
+            )
+        
+        # Application des algorithmes finaux
+        # K-means
+        final_kmeans = KMeans(n_clusters=n_clusters_kmeans, random_state=random_state, n_init=10)
+        kmeans_labels = final_kmeans.fit_predict(X_scaled)
+        
+        # CAH
+        final_cah = AgglomerativeClustering(n_clusters=n_clusters_cah, linkage=linkage_method)
+        cah_labels = final_cah.fit_predict(X_scaled)
+        
+        # Ajout des labels au dataframe original
+        df_clustered = df.copy()
+        df_clustered['Cluster_KMeans'] = kmeans_labels.astype(str)
+        df_clustered['Cluster_CAH'] = cah_labels.astype(str)
+        
+        # Métriques de qualité
+        kmeans_silhouette = silhouette_score(X_scaled, kmeans_labels)
+        kmeans_calinski = calinski_harabasz_score(X_scaled, kmeans_labels)
+        cah_silhouette = silhouette_score(X_scaled, cah_labels)
+        cah_calinski = calinski_harabasz_score(X_scaled, cah_labels)
+        
+        # Affichage des métriques
+        st.subheader("📊 Comparaison des performances")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("### 🎯 K-means")
+            subcol1, subcol2, subcol3 = st.columns(3)
+            with subcol1:
+                st.metric("Silhouette", f"{kmeans_silhouette:.3f}")
+            with subcol2:
+                st.metric("Calinski-H", f"{kmeans_calinski:.1f}")
+            with subcol3:
+                st.metric("Inertie", f"{final_kmeans.inertia_:.1f}")
+        
+        with col2:
+            st.write("### 🌳 CAH")
+            subcol1, subcol2 = st.columns(2)
+            with subcol1:
+                st.metric("Silhouette", f"{cah_silhouette:.3f}")
+            with subcol2:
+                st.metric("Calinski-H", f"{cah_calinski:.1f}")
+        
+        # Déterminer le meilleur algorithme
+        if kmeans_silhouette > cah_silhouette:
+            st.success("🏆 **K-means** obtient un meilleur score de Silhouette!")
+            best_algorithm = "K-means"
+        elif cah_silhouette > kmeans_silhouette:
+            st.success("🏆 **CAH** obtient un meilleur score de Silhouette!")
+            best_algorithm = "CAH"
+        else:
+            st.info("🤝 Les deux algorithmes obtiennent des scores similaires!")
+            best_algorithm = "Égalité"
+        
+        # Visualisations des clusters
+        st.subheader("📊 Visualisation des Clusters - Comparaison")
+        
+        # Choix de l'algorithme à visualiser
+        viz_algorithm = st.selectbox(
+            "Choisir l'algorithme pour la visualisation:",
+            ["K-means", "CAH", "Comparaison côte à côte"],
+            index=2
+        )
+        
+        if len(selected_features) >= 2:
+            # Graphique en 2D
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                var_x = st.selectbox("Variable X:", selected_features, key="x_var")
+            with col2:
+                var_y = st.selectbox("Variable Y:", selected_features, 
+                                index=1 if len(selected_features) > 1 else 0, key="y_var")
+            
+            if viz_algorithm == "Comparaison côte à côte":
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # K-means
+                    fig_kmeans = px.scatter(
+                        df_clustered, x=var_x, y=var_y, color='Cluster_KMeans',
+                        title=f'K-means: {var_x} vs {var_y}',
+                        color_discrete_sequence=px.colors.qualitative.Dark24
+                    )
+                    
+                    # Ajout des centroïdes K-means
+                    if normalize_data:
+                        centroids_kmeans = scaler.inverse_transform(final_kmeans.cluster_centers_)
+                    else:
+                        centroids_kmeans = final_kmeans.cluster_centers_
+                    
+                    centroids_kmeans_df = pd.DataFrame(centroids_kmeans, columns=selected_features)
+                    
+                    fig_kmeans.add_scatter(
+                        x=centroids_kmeans_df[var_x], y=centroids_kmeans_df[var_y],
+                        mode='markers', marker=dict(symbol='x', size=15, color='black'),
+                        name='Centroïdes', showlegend=True
+                    )
+                    
+                    st.plotly_chart(fig_kmeans, use_container_width=True)
+                
+                with col2:
+                    # CAH
+                    fig_cah = px.scatter(
+                        df_clustered, x=var_x, y=var_y, color='Cluster_CAH',
+                        title=f'CAH: {var_x} vs {var_y}',
+                        color_discrete_sequence=px.colors.qualitative.Set2
+                    )
+                    
+                    st.plotly_chart(fig_cah, use_container_width=True)
+            
+            elif viz_algorithm == "K-means":
+                fig_scatter = px.scatter(
+                    df_clustered, x=var_x, y=var_y, color='Cluster_KMeans',
+                    title=f'Clusters K-means: {var_x} vs {var_y}',
+                    color_discrete_sequence=px.colors.qualitative.Dark24
+                )
+                
+                # Ajout des centroïdes
+                if normalize_data:
+                    centroids = scaler.inverse_transform(final_kmeans.cluster_centers_)
+                else:
+                    centroids = final_kmeans.cluster_centers_
+                
+                centroids_df = pd.DataFrame(centroids, columns=selected_features)
+                
+                fig_scatter.add_scatter(
+                    x=centroids_df[var_x], y=centroids_df[var_y],
+                    mode='markers', marker=dict(symbol='x', size=15, color='black'),
+                    name='Centroïdes', showlegend=True
+                )
+                
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            else:  # CAH
+                fig_scatter = px.scatter(
+                    df_clustered, x=var_x, y=var_y, color='Cluster_CAH',
+                    title=f'Clusters CAH: {var_x} vs {var_y}',
+                    color_discrete_sequence=px.colors.qualitative.Set2
+                )
+                
+                st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        # Si plus de 2 variables, réduction dimensionnelle avec PCA
+        if len(selected_features) > 2:
+            st.subheader("🔍 Visualisation PCA (Réduction Dimensionnelle)")
+            
+            pca = PCA(n_components=2, random_state=random_state)
+            X_pca = pca.fit_transform(X_scaled)
+            
+            if viz_algorithm == "Comparaison côte à côte":
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    pca_df_kmeans = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+                    pca_df_kmeans['Cluster'] = kmeans_labels.astype(str)
+
+                    
+                    fig_pca_kmeans = px.scatter(
+                        pca_df_kmeans, x='PC1', y='PC2', color='Cluster',
+                        title=f'K-means PCA - Variance: {pca.explained_variance_ratio_.sum():.2%}',
+                        color_discrete_sequence=px.colors.qualitative.Dark24  # Nouvelle palette
+                    )
+                    
+                    st.plotly_chart(fig_pca_kmeans, use_container_width=True)
+                
+                with col2:
+                    pca_df_cah = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+                    pca_df_cah['Cluster'] = cah_labels.astype(str)
+                    
+                    fig_pca_cah = px.scatter(
+                        pca_df_cah, x='PC1', y='PC2', color='Cluster',
+                        title=f'CAH PCA - Variance: {pca.explained_variance_ratio_.sum():.2%}',
+                        color_discrete_sequence=px.colors.qualitative.Set2  # Nouvelle palette
+                    )
+                    
+                    st.plotly_chart(fig_pca_cah, use_container_width=True)
+            
+            else:
+                pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+                if viz_algorithm == "K-means":
+                    pca_df['Cluster'] = kmeans_labels
+                    color_palette = px.colors.qualitative.Dark24  # Nouvelle palette
+                else:
+                    pca_df['Cluster'] = cah_labels
+                    color_palette = px.colors.qualitative.Prism  # Nouvelle palette
+                
+                fig_pca = px.scatter(
+                    pca_df, x='PC1', y='PC2', color='Cluster',
+                    title=f'Clusters {viz_algorithm} (PCA) - Variance expliquée: {pca.explained_variance_ratio_.sum():.2%}',
+                    color_discrete_sequence=color_palette
+                )
+                
+                st.plotly_chart(fig_pca, use_container_width=True)
+            
+            # Information sur les composantes principales
+            st.write("**Contribution des variables aux composantes principales:**")
+            components_df = pd.DataFrame(
+                pca.components_.T,
+                columns=['PC1', 'PC2'],
+                index=selected_features
+            )
+            st.dataframe(components_df.round(3))
+        
+        
+        if analysis_algorithm == "K-means":
+            # Analyse K-means uniquement
+            for i in range(n_clusters_kmeans):
+                with st.expander(f"🎯 K-means - Cluster {i} (n = {len(df_clustered[df_clustered['Cluster_KMeans'] == str(i)])})"):
+                    cluster_data = df_clustered[df_clustered['Cluster_KMeans'] == str(i)]
+                    
+                    # Statistiques descriptives
+                    st.write("**Moyennes des variables:**")
+                    means = cluster_data[selected_features].mean()
+                    st.write(means.round(3))
+                    
+                    # Comparaison avec la moyenne globale
+                    st.write("**Écart par rapport à la moyenne globale:**")
+                    global_means = df[selected_features].mean()
+                    differences = ((means - global_means) / global_means * 100).round(1)
+                    st.write(f"{differences}%")
+                    
+                    # Variables catégorielles si disponibles
+                    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+                    if categorical_cols:
+                        st.write("**Distribution des variables catégorielles:**")
+                        for cat_col in categorical_cols[:3]:
+                            mode_val = cluster_data[cat_col].mode()
+                            if len(mode_val) > 0:
+                                st.write(f"- {cat_col}: {mode_val.iloc[0]} ({cluster_data[cat_col].value_counts().iloc[0]} occurrences)")
+        
+        elif analysis_algorithm == "CAH":
+            # Analyse CAH uniquement
+            for i in range(n_clusters_cah):
+                with st.expander(f"🌳 CAH - Cluster {i} (n = {len(df_clustered[df_clustered['Cluster_CAH'] == str(i)])})"):
+                    cluster_data = df_clustered[df_clustered['Cluster_CAH'] == str(i)]
+                    
+                    # Statistiques descriptives
+                    st.write("**Moyennes des variables:**")
+                    means = cluster_data[selected_features].mean()
+                    st.write(means.round(3))
+                    
+                    # Comparaison avec la moyenne globale
+                    st.write("**Écart par rapport à la moyenne globale:**")
+                    global_means = df[selected_features].mean()
+                    differences = ((means - global_means) / global_means * 100).round(1)
+                    st.write(f"{differences}%")
+                    
+                    # Variables catégorielles si disponibles
+                    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+                    if categorical_cols:
+                        st.write("**Distribution des variables catégorielles:**")
+                        for cat_col in categorical_cols[:3]:
+                            mode_val = cluster_data[cat_col].mode()
+                            if len(mode_val) > 0:
+                                st.write(f"- {cat_col}: {mode_val.iloc[0]} ({cluster_data[cat_col].value_counts().iloc[0]} occurrences)")
+        
+        else:
+            # Comparaison côte à côte
+            max_clusters_comp = max(n_clusters_kmeans, n_clusters_cah)
+            
+            for i in range(max_clusters_comp):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if i < n_clusters_kmeans:
+                        with st.expander(f"🎯 K-means - Cluster {i}"):
+                            cluster_data_kmeans = df_clustered[df_clustered['Cluster_KMeans'] == str(i)]
+                            st.write(f"**Taille:** {len(cluster_data_kmeans)} observations")
+                            
+                            means_kmeans = cluster_data_kmeans[selected_features].mean()
+                            st.write("**Moyennes:**")
+                            st.write(means_kmeans.round(3))
+                            
+                            global_means = df[selected_features].mean()
+                            differences_kmeans = ((means_kmeans - global_means) / global_means * 100).round(1)
+                            st.write("**Écarts (%):**")
+                            st.write(differences_kmeans)
+                    else:
+                        st.write("—")
+                
+                with col2:
+                    if i < n_clusters_cah:
+                        with st.expander(f"🌳 CAH - Cluster {i}"):
+                            cluster_data_cah = df_clustered[df_clustered['Cluster_CAH'] == str(i)]
+                            st.write(f"**Taille:** {len(cluster_data_cah)} observations")
+                            
+                            means_cah = cluster_data_cah[selected_features].mean()
+                            st.write("**Moyennes:**")
+                            st.write(means_cah.round(3))
+                            
+                            global_means = df[selected_features].mean()
+                            differences_cah = ((means_cah - global_means) / global_means * 100).round(1)
+                            st.write("**Écarts (%):**")
+                            st.write(differences_cah)
+                    else:
+                        st.write("—")
+        
+        # Matrice de concordance entre les deux méthodes
+        if n_clusters_kmeans == n_clusters_cah:
+            st.subheader("🔄 Matrice de Concordance entre K-means et CAH")
+            
+            # Créer une matrice de confusion
+            concordance_matrix = pd.crosstab(
+                df_clustered['Cluster_KMeans'], 
+                df_clustered['Cluster_CAH'], 
+                margins=True
+            )
+            
+            st.write("**Tableau de concordance:**")
+            st.dataframe(concordance_matrix)
+            
+            # Calcul de l'accord entre les deux méthodes
+            agreement = np.sum(np.diag(concordance_matrix.values[:-1, :-1])) / len(df_clustered)
+            st.write(f"**Taux d'accord entre les deux méthodes:** {agreement:.2%}")
+            
+            # Heatmap de concordance
+            fig_concordance = plt.figure(figsize=(8, 6))
+            sns.heatmap(concordance_matrix.iloc[:-1, :-1], annot=True, fmt='d', cmap='Blues')
+            plt.title('Matrice de Concordance K-means vs CAH')
+            plt.xlabel('Clusters CAH')
+            plt.ylabel('Clusters K-means')
+            st.pyplot(fig_concordance)
+            plt.close()
+        
+        # Centroïdes et Distances
+        st.subheader("🎯 Centroïdes et Analyse des Distances")
+        
+        # Affichage des centroïdes pour K-means
+        if normalize_data:
+            centroids_display_kmeans = scaler.inverse_transform(final_kmeans.cluster_centers_)
+        else:
+            centroids_display_kmeans = final_kmeans.cluster_centers_
+        
+        centroids_df_kmeans = pd.DataFrame(
+            centroids_display_kmeans,
+            columns=selected_features,
+            index=[f'K-means Cluster {i}' for i in range(n_clusters_kmeans)]
+        )
+        
+        # Calcul des centroïdes pour CAH
+        centroids_cah = []
+        for i in range(n_clusters_cah):
+            cluster_data = df_clustered[df_clustered['Cluster_CAH'] == str(i)]
+            centroid = cluster_data[selected_features].mean().values
+            centroids_cah.append(centroid)
+        
+        centroids_df_cah = pd.DataFrame(
+            centroids_cah,
+            columns=selected_features,
+            index=[f'CAH Cluster {i}' for i in range(n_clusters_cah)]
+        )
+        
+        # Affichage des centroïdes
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🎯 Centroïdes K-means:**")
+            st.dataframe(centroids_df_kmeans.round(3))
+        
+        with col2:
+            st.write("**🌳 Centroïdes CAH:**")
+            st.dataframe(centroids_df_cah.round(3))
+        
+        # Heatmaps des centroïdes
+        if len(selected_features) > 2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Heatmap Centroïdes K-means:**")
+                fig_heatmap_kmeans = plt.figure(figsize=(10, 6))
+                sns.heatmap(centroids_df_kmeans.T, annot=True, cmap='viridis', center=0, fmt='.2f')
+                plt.title('Heatmap des Centroïdes K-means')
+                plt.tight_layout()
+                st.pyplot(fig_heatmap_kmeans)
+                plt.close()
+            
+            with col2:
+                st.write("**Heatmap Centroïdes CAH:**")
+                fig_heatmap_cah = plt.figure(figsize=(10, 6))
+                sns.heatmap(centroids_df_cah.T, annot=True, cmap='plasma', center=0, fmt='.2f')
+                plt.title('Heatmap des Centroïdes CAH')
+                plt.tight_layout()
+                st.pyplot(fig_heatmap_cah)
+                plt.close()
+        
+        # Export des résultats
+        st.subheader("💾 Export des Résultats")
+        
+        # Choix du format d'export
+        export_choice = st.selectbox(
+            "Choisir les données à exporter:",
+            ["K-means uniquement", "CAH uniquement", "Les deux algorithmes"],
+            index=2
+        )
+        
+        if export_choice == "K-means uniquement":
+            export_df = df.copy()
+            export_df['Cluster'] = kmeans_labels
+            filename = f"data_kmeans_clusters_{n_clusters_kmeans}.csv"
+        elif export_choice == "CAH uniquement":
+            export_df = df.copy()
+            export_df['Cluster'] = cah_labels
+            filename = f"data_cah_clusters_{n_clusters_cah}.csv"
+        else:
+            export_df = df_clustered
+            filename = f"data_clustering_comparison.csv"
+        
+        csv_results = export_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Télécharger les données avec clusters",
+            data=csv_results,
+            file_name=filename,
+            mime="text/csv"
+        )
+        
+        # Résumé des insights
+        st.subheader("💡 Insights et Recommandations")
+        
+        insights = []
+        
+        # Comparaison des performances
+        if kmeans_silhouette > cah_silhouette:
+            insights.append(f"🏆 **K-means** montre de meilleures performances (Silhouette: {kmeans_silhouette:.3f} vs {cah_silhouette:.3f})")
+        elif cah_silhouette > kmeans_silhouette:
+            insights.append(f"🏆 **CAH** montre de meilleures performances (Silhouette: {cah_silhouette:.3f} vs {kmeans_silhouette:.3f})")
+        else:
+            insights.append("🤝 Les deux algorithmes montrent des performances similaires")
+        
+        # Taille des clusters K-means
+        cluster_sizes_kmeans = df_clustered['Cluster_KMeans'].value_counts().sort_index()
+        largest_cluster_kmeans = cluster_sizes_kmeans.idxmax()
+        smallest_cluster_kmeans = cluster_sizes_kmeans.idxmin()
+        
+        insights.append(f"📊 **K-means:** Cluster le plus grand = {largest_cluster_kmeans} ({cluster_sizes_kmeans[largest_cluster_kmeans]} obs.), "
+                    f"le plus petit = {smallest_cluster_kmeans} ({cluster_sizes_kmeans[smallest_cluster_kmeans]} obs.)")
+        
+        # Taille des clusters CAH
+        cluster_sizes_cah = df_clustered['Cluster_CAH'].value_counts().sort_index()
+        largest_cluster_cah = cluster_sizes_cah.idxmax()
+        smallest_cluster_cah = cluster_sizes_cah.idxmin()
+        
+        insights.append(f"🌳 **CAH:** Cluster le plus grand = {largest_cluster_cah} ({cluster_sizes_cah[largest_cluster_cah]} obs.), "
+                    f"le plus petit = {smallest_cluster_cah} ({cluster_sizes_cah[smallest_cluster_cah]} obs.)")
+        
+        # Variables les plus discriminantes
+        if len(selected_features) > 1:
+            # Pour K-means
+            kmeans_cluster_means = df_clustered.groupby('Cluster_KMeans')[selected_features].mean()
+            kmeans_feature_variance = kmeans_cluster_means.var()
+            most_discriminant_kmeans = kmeans_feature_variance.idxmax()
+            
+            # Pour CAH
+            cah_cluster_means = df_clustered.groupby('Cluster_CAH')[selected_features].mean()
+            cah_feature_variance = cah_cluster_means.var()
+            most_discriminant_cah = cah_feature_variance.idxmax()
+            
+            insights.append(f"🔍 Variable la plus discriminante pour **K-means:** '{most_discriminant_kmeans}'")
+            insights.append(f"🔍 Variable la plus discriminante pour **CAH:** '{most_discriminant_cah}'")
+        
+        # Recommandation finale
+        if best_algorithm == "K-means":
+            insights.append("🎯 **Recommandation:** Utiliser K-means pour cette analyse")
+        elif best_algorithm == "CAH":
+            insights.append("🎯 **Recommandation:** Utiliser CAH pour cette analyse")
+        else:
+            insights.append("🎯 **Recommandation:** Les deux méthodes sont équivalentes, choisir selon le contexte")
+        
+        # Accord entre méthodes (si même nombre de clusters)
+        if n_clusters_kmeans == n_clusters_cah:
+            agreement = np.sum(np.diag(pd.crosstab(df_clustered['Cluster_KMeans'], df_clustered['Cluster_CAH']).values)) / len(df_clustered)
+            if agreement > 0.7:
+                insights.append(f"✅ Bon accord entre les deux méthodes ({agreement:.1%}) - résultats cohérents")
+            elif agreement > 0.5:
+                insights.append(f"⚠️ Accord modéré entre les deux méthodes ({agreement:.1%}) - vérifier l'interprétation")
+            else:
+                insights.append(f"❌ Faible accord entre les deux méthodes ({agreement:.1%}) - résultats divergents")
+        
+        for insight in insights:
+            st.write(insight)
 
     def ACP_analysis(df):
         """

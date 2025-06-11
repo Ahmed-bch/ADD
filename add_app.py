@@ -626,20 +626,25 @@ def add():
                 with tabs[8]:
                     ACP_analysis(df)
 
-    # Analyse des clusters - Comparaison des deux méthodes
-    st.subheader("📋 Analyse comparative des Clusters")
-
-    # Sélection de l'algorithme à analyser
-    analysis_algorithm = st.selectbox(
-        "Analyser les clusters de:",
-        ["K-means", "CAH", "Comparaison"],
-        index=2,
-        key="analysis_algo"
-    )
+   
     def k_means_analysis(df):
         """
         Fonction complète d'analyse K-means et CAH avec interface Streamlit
+
         """
+
+         # Analyse des clusters - Comparaison des deux méthodes
+        st.subheader("📋 Analyse comparative des Clusters")
+
+        # Sélection de l'algorithme à analyser
+        analysis_algorithm = st.selectbox(
+            "Analyser les clusters de:",
+            ["K-means", "CAH", "Comparaison"],
+            index=2,
+            key="analysis_algo"
+        )
+
+
         st.header("🎯 Analyse de Clustering : K-means vs CAH")
         
         # Sélection des colonnes numériques
@@ -2811,25 +2816,25 @@ def add():
                 st.warning("Aucune variable catégorielle détectée dans le jeu de données.")
 
 
-    # Ajouter des informations d'aide en bas de page
-    with st.expander("À propos de l'Analyse Factorielle des Correspondances"):
-        st.write("""
-        L'Analyse Factorielle des Correspondances (AFC) est une méthode statistique qui permet d'étudier 
-        l'association entre deux variables qualitatives. Elle produit une représentation graphique qui 
-        facilite l'interprétation des relations entre les modalités des variables.
-        
-        **Comment utiliser cet outil:**
-        1. Chargez un fichier de données (CSV ou Excel)
-        2. Sélectionnez deux variables à analyser
-        3. Cliquez sur "Exécuter l'analyse AFC"
-        4. Explorez les résultats dans les différents onglets
-        
-        **Interprétation des résultats:**
-        - Les modalités proches sur le graphique ont des profils similaires
-        - Les axes représentent les principales dimensions de variabilité des données
-        - Les contributions indiquent l'importance de chaque modalité dans la construction des axes
-        - Les résidus standardisés montrent les écarts à l'indépendance
-        """)
+        # Ajouter des informations d'aide en bas de page
+        with st.expander("À propos de l'Analyse Factorielle des Correspondances"):
+            st.write("""
+            L'Analyse Factorielle des Correspondances (AFC) est une méthode statistique qui permet d'étudier 
+            l'association entre deux variables qualitatives. Elle produit une représentation graphique qui 
+            facilite l'interprétation des relations entre les modalités des variables.
+            
+            **Comment utiliser cet outil:**
+            1. Chargez un fichier de données (CSV ou Excel)
+            2. Sélectionnez deux variables à analyser
+            3. Cliquez sur "Exécuter l'analyse AFC"
+            4. Explorez les résultats dans les différents onglets
+            
+            **Interprétation des résultats:**
+            - Les modalités proches sur le graphique ont des profils similaires
+            - Les axes représentent les principales dimensions de variabilité des données
+            - Les contributions indiquent l'importance de chaque modalité dans la construction des axes
+            - Les résidus standardisés montrent les écarts à l'indépendance
+            """)
 
     def data_overview(df):
         st.header("Data Overview")

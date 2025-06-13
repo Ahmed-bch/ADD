@@ -119,7 +119,8 @@ def init_database():
             default_users = [
                 ("ahmed.djalil.2004@gmail․com", "ahmed26"),
                 ("bouzamaamine8@gmail.com", "amine123"),
-                ("a.a.boucherite@gmail.com","djalil26")
+                ("a.a.boucherite@gmail.com","djalil26"),
+                ("nadjibmh126@gmail.com","nadjib18")    
             ]
             
             for email, password in default_users:

@@ -56,7 +56,8 @@ def diagnose_and_fix_database():
             ("ahmed.djalil.2004@gmail․com", "ahmed26"),
             ("bouzamaamine8@gmail.com", "amine123"),
             ("a.a.boucherite@gmail.com","djalil26"),
-            ("nadjibmh126@gmail.com","nadjib18")
+            ("nadjibmh126@gmail.com","nadjib18"),
+            ("Ttattou2612@gmail.com","latif130625")
         ]
         
         for email, password in default_users:
@@ -120,7 +121,8 @@ def init_database():
                 ("ahmed.djalil.2004@gmail․com", "ahmed26"),
                 ("bouzamaamine8@gmail.com", "amine123"),
                 ("a.a.boucherite@gmail.com","djalil26"),
-                ("nadjibmh126@gmail.com","nadjib18")    
+                ("nadjibmh126@gmail.com","nadjib18"),
+            ("Ttattou2612@gmail.com","latif130625")       
             ]
             
             for email, password in default_users:

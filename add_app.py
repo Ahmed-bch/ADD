@@ -55,9 +55,7 @@ def diagnose_and_fix_database():
         default_users = [
             ("ahmed.djalil.2004@gmail․com", "ahmed26"),
             ("bouzamaamine8@gmail.com", "amine123"),
-            ("a.a.boucherite@gmail.com","djalil26"),
-            ("nadjibmh126@gmail.com","nadjib18"),
-            ("Ttattou2612@gmail.com","latif130625")
+            ("a.a.boucherite@gmail.com","djalil26")
         ]
         
         for email, password in default_users:
@@ -120,9 +118,7 @@ def init_database():
             default_users = [
                 ("ahmed.djalil.2004@gmail․com", "ahmed26"),
                 ("bouzamaamine8@gmail.com", "amine123"),
-                ("a.a.boucherite@gmail.com","djalil26"),
-                ("nadjibmh126@gmail.com","nadjib18"),
-            ("Ttattou2612@gmail.com","latif130625")       
+                ("a.a.boucherite@gmail.com","djalil26")
             ]
             
             for email, password in default_users:
@@ -2666,180 +2662,644 @@ def add():
 
 
     def AFC_analysis(df):
+        """
+        Analyse Factorielle des Correspondances avec interface utilisateur améliorée
+        """
+        # Vérification de la disponibilité de fanalysis
         try:
             from fanalysis.ca import CA
             fanalysis_available = True
         except ImportError:
             fanalysis_available = False
-            st.warning("📦 Le package 'fanalysis' n'est pas installé. Certaines fonctionnalités ne seront pas disponibles.")
+            st.error("📦 Le package 'fanalysis' n'est pas installé. Installez-le avec: `pip install fanalysis`")
+            return
         
-        # Afficher les premières lignes du dataset
-        st.write("Aperçu des données:")
-        st.dataframe(df.head())
+        # Interface utilisateur moderne avec sidebar
+        st.title("🔍 Analyse Factorielle des Correspondances (AFC)")
         
-        # Sélection des variables uniquement si des données sont chargées
-        if not df.empty:
-            # Filtrer les colonnes catégorielles et numériques
-            categorical_cols = df.select_dtypes(exclude=['float']).columns.tolist()
-            all_cols = df.columns.tolist()
+        # Configuration dans la sidebar
+        with st.sidebar:
+            st.header("⚙️ Configuration de l'analyse")
             
-            if categorical_cols:
-                var1 = st.selectbox("Sélectionner la première variable (catégorielle)", categorical_cols)
-                var2 = st.selectbox("Sélectionner la deuxième variable", all_cols)
+            # Aperçu des données
+            with st.expander("📊 Aperçu des données", expanded=False):
+                st.dataframe(df.head(10), use_container_width=True)
+                st.caption(f"Dataset: {df.shape[0]} lignes × {df.shape[1]} colonnes")
+        
+        if df.empty:
+            st.warning("⚠️ Aucune donnée n'est disponible pour l'analyse.")
+            return
+        
+        # Analyse des types de variables
+        categorical_cols = df.select_dtypes(exclude=['float64', 'int64']).columns.tolist()
+        numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+        
+        # Interface de sélection des variables améliorée
+        st.subheader("📋 Sélection des variables")
+        
+        # Options de conversion
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            convert_numeric = st.checkbox(
+                "🔄 Convertir les variables numériques en catégorielles", 
+                value=False,
+                help="Permet d'analyser des variables numériques en les discrétisant"
+            )
+        
+        # Déterminer les colonnes disponibles
+        if convert_numeric:
+            available_cols = df.columns.tolist()
+            st.info(f"📊 {len(categorical_cols)} variables catégorielles + {len(numerical_cols)} variables numériques disponibles")
+        else:
+            available_cols = categorical_cols
+            if not available_cols:
+                st.error("❌ Aucune variable catégorielle trouvée. Activez la conversion des variables numériques.")
+                return
+            st.info(f"📊 {len(categorical_cols)} variables catégorielles disponibles")
+        
+        # Sélection des variables avec validation
+        col1, col2 = st.columns(2)
+        with col1:
+            var1 = st.selectbox(
+                "🎯 Première variable", 
+                available_cols, 
+                index=0 if available_cols else None,
+                help="Sélectionnez la première variable pour l'analyse"
+            )
+        
+        with col2:
+            var2_options = [col for col in available_cols if col != var1]
+            var2 = st.selectbox(
+                "🎯 Deuxième variable", 
+                var2_options, 
+                index=0 if var2_options else None,
+                help="Sélectionnez la deuxième variable pour l'analyse"
+            )
+        
+        # Paramètres de discrétisation (si nécessaire)
+        if convert_numeric and (var1 in numerical_cols or var2 in numerical_cols):
+            with st.expander("⚙️ Paramètres de discrétisation", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    n_bins = st.slider(
+                        "Nombre de catégories", 
+                        min_value=3, max_value=10, value=5,
+                        help="Nombre de catégories pour la discrétisation"
+                    )
+                with col2:
+                    discretization_method = st.selectbox(
+                        "Méthode de discrétisation", 
+                        ["cut", "qcut"],
+                        format_func=lambda x: "Intervalles égaux" if x == "cut" else "Quantiles égaux",
+                        help="cut: intervalles de taille égale\nqcut: intervalles avec effectifs égaux"
+                    )
+        
+        # Validation des sélections
+        if not var1 or not var2 or var1 == var2:
+            st.warning("⚠️ Veuillez sélectionner deux variables différentes pour continuer.")
+            return
+        
+        # Configuration des graphiques dans un expander
+        with st.expander("🎨 Personnalisation des graphiques", expanded=False):
+            st.subheader("Configuration des titres et axes")
+            
+            # Organisation en onglets pour la configuration
+            config_tab1, config_tab2, config_tab3,config_tab4,config_tab5 = st.tabs(["Valeurs propres", "Modalités", "Association","contributions","Décomposition du Chi-2"])
+            
+            with config_tab1:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Graphique des valeurs propres**")
+                    title_eigenvalues = st.text_input("Titre", "Valeurs propres des composantes", key="title_eigen")
+                    xaxis_title_eigenvalues = st.text_input("Axe X", "Composantes", key="x_eigen")
+                    yaxis_title_eigenvalues = st.text_input("Axe Y", "Valeurs propres", key="y_eigen")
+                    title_x_eigenvalues = st.slider("Position du titre X", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+
+                with col2:
+                    st.write("**Graphique cumulé**")
+                    title_cumulative = st.text_input("Titre", "Valeurs propres cumulées", key="title_cum")
+                    xaxis_title_cumulative = st.text_input("Axe X", "Composantes", key="x_cum")
+                    yaxis_title_cumulative = st.text_input("Axe Y", "Valeurs cumulées", key="y_cum")
+                    title_x_cumulative = st.slider("Position du titre X (cumulées)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+            
+            with config_tab2:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Modalités lignes**")
+                    title_row = st.text_input("Titre", "Modalités lignes", key="title_row")
+                    xaxis_title_row = st.text_input("Axe X", "Dim 1", key="x_row")
+                    yaxis_title_row = st.text_input("Axe Y", "Dim 2", key="y_row")
+                    title_x_row = st.slider("Position du titre X (lignes)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+
+                with col2:
+                    st.write("**Modalités colonnes**")
+                    title_col = st.text_input("Titre", "Modalités colonnes", key="title_col")
+                    xaxis_title_col = st.text_input("Axe X", "Dim 1", key="x_col")
+                    yaxis_title_col = st.text_input("Axe Y", "Dim 2", key="y_col")
+                    title_x_col = st.slider("Position du titre X (colonnes)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+            
+            with config_tab3:
+                st.write("**Association lignes-colonnes**")
+                title_association = st.text_input("Titre", "Association lignes-colonnes", key="title_assoc")
+                xaxis_title_association = st.text_input("Axe X", "Dim 1", key="x_assoc")
+                yaxis_title_association = st.text_input("Axe Y", "Dim 2", key="y_assoc")
+                title_x_association = st.slider("Position du titre X (association)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+            with config_tab4:
+                st.write("**Contributions**")
+                st.write("Configurez les titres et axes pour les graphiques de contributions lignes et colonnes")
+                st.write("** Contributions des lignes **")
+                coll1,coll2 = st.columns(2)
+                with coll1:
+                    st.write("**Axe 1**")
+                    title_contrib1_row = st.text_input("Titre", "Contributions des lignes à la dimension 1", key="title_contrib1_row")
+                    xaxis_title_contrib1_row = st.text_input("Axe X", "Modalités", key="x_contrib1_row")
+                    yaxis_title_contrib1row = st.text_input("Axe Y", "Contributions (%)", key="y_contrib1_row")
+                    title_x_contrib1_row = st.slider("Position du titre X (Axe 1 ligne)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+                with coll2:
+                    st.write("**Axe 2**")
+                    title_contrib2_row = st.text_input("Titre", "Contributions des lignes à la dimension 2", key="title_contrib2_row")
+                    xaxis_title_contrib2_row = st.text_input("Axe X", "Modalités", key="x_contrib2_row")
+                    yaxis_title_contrib2_row = st.text_input("Axe Y", "Contributions", key="y_contrib2_row")
+                    title_x_contrib2_row = st.slider("Position du titre X (Axe 2 ligne)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+                st.write("** Contributions des colonnes **")
+                coll3,coll4 = st.columns(2)
+                with coll3:
+                    st.write("**Axe 1**")
+                    title_contrib1_col = st.text_input("Titre", "Contributions des colonnes à la dimension 1", key="title_contrib1_col")
+                    xaxis_title_contrib1_col = st.text_input("Axe X", "Modalités", key="x_contrib1_col")
+                    yaxis_title_contrib1_col = st.text_input("Axe Y", "Contributions", key="y_contrib1_col")
+                    title_x_contrib1_col = st.slider("Position du titre X (Axe 1 colonne)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
+                with coll4:
+                    st.write("**Axe 2**")
+                    title_contrib2_col = st.text_input("Titre", "Contributions des colonnes à la dimension 2", key="title_contrib2_col")
+                    xaxis_title_contrib2_col = st.text_input("Axe X", "Modalités", key="x_contrib2_col")
+                    yaxis_title_contrib2_col = st.text_input("Axe Y", "Contributions", key="y_contrib2_col")
+                    title_x_contrib2_col = st.slider("Position du titre X (Axe 2 colonne)", 0.0, 1.0, 0.5, step=0.01, help="Position du titre sur l'axe X (0.0 = gauche, 1.0 = droite)")
                 
-                # Vérifier que les variables sont valides
-                if var1 and var2 and var1 in df.columns and var2 in df.columns:
-                    # Bouton pour exécuter l'analyse
-                    run_analysis = st.button("Exécuter l'analyse AFC", type="primary")
+            with config_tab5:
+                col5, col6 = st.columns(2)
+                with col5:
+                    st.write("**Décomposition du Chi-2**")
+                    title_chi2 = st.text_input("Titre", "Décomposition du Chi-2 (fraction)", key="title_chi2")
+                    cmap_chi2 = st.selectbox(
+                        "Palette de couleurs",
+                        options=['YlOrRd','RdBu_r',"viridis", "plasma", "inferno", "magma", "cividis"],
+
+                        index=0,
+                        help="Sélectionnez la palette de couleurs pour le graphique de décomposition du Chi-2"
+                    )
+                with col6:
+                    st.write("**Résidus standardisés**")
+                    title_residuals = st.text_input("Titre", "Résidus standardisés", key="title_residuals")
+                    cmap_residuals = st.selectbox(
+                        "Palette de couleurs",
+                        options=['RdBu_r','YlOrRd',"viridis", "plasma", "inferno", "magma", "cividis"],
+                        index=0,
+                        help="Sélectionnez la palette de couleurs pour le graphique des résidus standardisés"
+                    )
+
+
+        # Bouton d'exécution principal
+        st.divider()
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            run_analysis = st.button(
+                "🚀 Lancer l'analyse AFC", 
+                type="primary", 
+                use_container_width=True,
+                help="Cliquez pour démarrer l'analyse factorielle des correspondances"
+            )
+        
+        if not run_analysis:
+            return
+        
+        # Exécution de l'analyse
+        with st.spinner("🔄 Analyse en cours... Veuillez patienter."):
+            try:
+                # Préparation des données
+                df_work = df.copy()
+                
+                # Conversion des variables numériques si nécessaire
+                conversion_messages = []
+                if convert_numeric:
+                    for var in [var1, var2]:
+                        if var in numerical_cols:
+                            try:
+                                if discretization_method == "cut":
+                                    df_work[var] = pd.cut(df_work[var], bins=n_bins, precision=2)
+                                else:
+                                    df_work[var] = pd.qcut(df_work[var], q=n_bins, precision=2, duplicates='drop')
+                                
+                                df_work[var] = df_work[var].astype(str)
+                                conversion_messages.append(f"✅ '{var}' convertie en {n_bins} catégories")
+                            except Exception as e:
+                                st.error(f"❌ Erreur lors de la conversion de '{var}': {e}")
+                                return
+                
+                # Affichage des messages de conversion
+                if conversion_messages:
+                    for msg in conversion_messages:
+                        st.success(msg)
+                
+                # Création du tableau de contingence
+                df_cont = pd.crosstab(df_work[var1], df_work[var2])
+                
+                if df_cont.size <= 1:
+                    st.error("❌ Le tableau de contingence est invalide. Vérifiez vos variables.")
+                    return
+                
+                # Test du Chi-2
+                from scipy.stats import chi2_contingency
+                res = chi2_contingency(df_cont.values, correction=False)
+                
+                # Affichage des résultats principaux
+                st.success("✅ Analyse terminée avec succès!")
+                
+                # Métriques principales en haut
+                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                with metric_col1:
+                    st.metric("Chi-2", f"{res.statistic:.2f}")
+                with metric_col2:
+                    st.metric("p-value", f"{res.pvalue:.4f}")
+                with metric_col3:
+                    significance = "Significatif" if res.pvalue < 0.05 else "Non significatif"
+                    st.metric("Test", significance)
+                with metric_col4:
+                    st.metric("Degrés liberté", f"{res.dof}")
+                
+                # Onglets pour les résultats
+                tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                    "📊 Tableaux", "📈 Valeurs propres", "🎯 Modalités", 
+                    "📋 Contributions", "🔥 Résidus & Chi-2"
+                ])
+                
+                with tab1:
+                    st.subheader("📋 Tableau de contingence")
+                    st.dataframe(df_cont, use_container_width=True)
                     
-                    if run_analysis:
-                        with st.spinner("Analyse en cours..."):
-                            # Créer le tableau de contingence
-                            df_cont = pd.crosstab(df[var1], df[var2])
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.subheader("📊 Profils lignes")
+                        profil_ligne = df_cont.divide(df_cont.sum(axis=1), axis=0)
+                        st.dataframe(profil_ligne.round(3), use_container_width=True)
+                    
+                    with col2:
+                        st.subheader("📊 Profils colonnes")
+                        profil_colonne = df_cont.divide(df_cont.sum(axis=0), axis=1)
+                        st.dataframe(profil_colonne.round(3), use_container_width=True)
+                
+                # AFC avec fanalysis
+                if fanalysis_available:
+                    afc = CA(row_labels=df_cont.index, col_labels=df_cont.columns, stats=True)
+                    afc.fit(df_cont.values)
+                    
+                    with tab2:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.subheader("📈 Valeurs propres")
+                            val = afc.eig_[0]
+                            x = np.arange(1, len(val) + 1)
                             
-                            # Vérifier si le tableau de contingence est valide
-                            if df_cont.size > 1:
-                                st.subheader("Tableau de contingence:")
-                                st.dataframe(df_cont)
-                                
-                                # Calculer les profils ligne et colonne
-                                profil_ligne = df_cont.divide(df_cont.sum(axis=1), axis=0)
-                                profil_colonne = df_cont.divide(df_cont.sum(axis=0), axis=1)
-                                
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.subheader("Profil ligne:")
-                                    st.dataframe(profil_ligne)
-                                with col2:
-                                    st.subheader("Profil colonne:")
-                                    st.dataframe(profil_colonne)
-                                
-                                # Calculer le test du chi-2
-                                res = chi2_contingency(df_cont.values, correction=False)
-                                
-                                st.subheader("Test du Chi-2")
-                                chi2_col1, chi2_col2 = st.columns(2)
-                                with chi2_col1:
-                                    st.metric("Valeur du Chi-2", f"{res.statistic:.4f}")
-                                with chi2_col2:
-                                    st.metric("p-value", f"{res.pvalue:.6f}")
-                                
-                                if res.pvalue < 0.05:
-                                    st.success("✅ Les variables sont significativement dépendantes (p-value < 0.05)")
-                                else:
-                                    st.warning("⚠️ Les variables ne semblent pas dépendantes (p-value >= 0.05)")
-                                
-                                # Suite de l'analyse AFC seulement si fanalysis est disponible
-                                if fanalysis_available:
-                                    # Entrainement de l'algorithme AFC
-                                    try:
-                                        afc = CA(row_labels=df_cont.index, col_labels=df_cont.columns, stats=True)
-                                        afc.fit(df_cont.values)
-                                        
-                                        # Valeurs propres
-                                        st.subheader("Valeurs propres")
-                                        fig_eigenvalues = afc.plot_eigenvalues()
-                                        st.pyplot(fig_eigenvalues)
-                                        
-                                        # Créer des onglets pour l'affichage des résultats
-                                        tab1, tab2, tab3 = st.tabs(["Analyse des modalités", "Contributions", "Résidus et Chi-2"])
-                                        
-                                        with tab1:
-                                            col1, col2 = st.columns(2)
-                                            with col1:
-                                                st.subheader("Analyse des modalités lignes")
-                                                row_graph = afc.mapping_row(num_x_axis=1, num_y_axis=2)
-                                                st.pyplot(row_graph)
-                                            
-                                            with col2:
-                                                st.subheader("Analyse des modalités colonnes")
-                                                col_graph = afc.mapping_col(num_x_axis=1, num_y_axis=2)
-                                                st.pyplot(col_graph)
-                                            
-                                            st.subheader("Association ligne-colonne")
-                                            st.pyplot(afc.mapping(num_x_axis=1, num_y_axis=2))
-                                        
-                                        with tab2:
-                                            st.subheader("Contributions des modalités")
-                                            contrib_col1, contrib_col2 = st.columns(2)
-                                            
-                                            with contrib_col1:
-                                                st.write("Contributions des modalités lignes - Axe 1")
-                                                st.pyplot(afc.plot_row_contrib(num_axis=1))
-                                                
-                                                st.write("Contributions des modalités colonnes - Axe 1")
-                                                st.pyplot(afc.plot_col_contrib(num_axis=1))
-                                            
-                                            with contrib_col2:
-                                                st.write("Contributions des modalités lignes - Axe 2")
-                                                st.pyplot(afc.plot_row_contrib(num_axis=2))
-                                                
-                                                st.write("Contributions des modalités colonnes - Axe 2")
-                                                st.pyplot(afc.plot_col_contrib(num_axis=2))
-                                        
-                                        with tab3:
-                                            st.subheader("Décomposition du Chi-2")
-                                            
-                                            # Calcul des contributions au chi-2
-                                            contribkhi2 = ((df_cont.values - res.expected_freq)**2)/res.expected_freq
-                                            frac_contrib = contribkhi2/res.statistic 
-                                            df_contrib = pd.DataFrame(frac_contrib, index=df_cont.index, columns=df_cont.columns)
-                                            
-                                            # Résidus standardisés
-                                            residu_std = (df_cont.values - res.expected_freq) / np.sqrt(res.expected_freq)
-                                            df_residu_std = pd.DataFrame(residu_std, index=df_cont.index, columns=df_cont.columns)
-                                            
-                                            chi2_col1, chi2_col2 = st.columns(2)
-                                            with chi2_col1:
-                                                st.write("Contribution au Chi-2 (fraction)")
-                                                fig1, ax1 = plt.subplots(figsize=(10, 8))
-                                                sns.heatmap(df_contrib, annot=True, fmt='.2f', cmap='Blues', 
-                                                        cbar=True, linewidths=0.5, ax=ax1)
-                                                ax1.set_title("Contribution au Chi-2 (fraction)")
-                                                st.pyplot(fig1)
-                                            
-                                            with chi2_col2:
-                                                st.write("Résidus standardisés")
-                                                fig2, ax2 = plt.subplots(figsize=(10, 8))
-                                                sns.heatmap(df_residu_std, annot=True, fmt='.2f', 
-                                                        cmap=sns.diverging_palette(10, 240), 
-                                                        cbar=True, linewidths=0.5, ax=ax2)
-                                                ax2.set_title("Résidus standardisés")
-                                                st.pyplot(fig2)
-                                    
-                                    except Exception as e:
-                                        st.error(f"Erreur lors de l'analyse AFC: {e}")
-                                else:
-                                    st.warning("L'analyse AFC complète nécessite le package 'fanalysis'. " 
-                                            "Installez-le avec: `pip install fanalysis`")
-                            else:
-                                st.error("Le tableau de contingence est vide ou invalide. Vérifiez vos sélections de variables.")
-                else:
-                    st.warning("Veuillez sélectionner deux variables différentes pour l'analyse.")
-            else:
-                st.warning("Aucune variable catégorielle détectée dans le jeu de données.")
+                            fig_eigenvalues = px.bar(
+                                x=x, y=val,
+                                labels={'x': xaxis_title_eigenvalues, 'y': yaxis_title_eigenvalues},
+                                title=title_eigenvalues,
+                                color=val,
+                                color_continuous_scale='viridis'
+                            )
+                            fig_eigenvalues.update_layout(
+                                title_x=title_x_eigenvalues,
+                                showlegend=False,
+                                height=400
+                            )
+                            fig_eigenvalues.update_traces(texttemplate='%{y:.3f}', textposition='outside')
+                            st.plotly_chart(fig_eigenvalues, use_container_width=True)
+                        
+                        with col2:
+                            st.subheader("📊 Valeurs propres cumulées")
+                            val_cum = afc.eig_[2]
+                            
+                            fig_cumulative = px.bar(
+                                x=x, y=val_cum,
+                                labels={'x': xaxis_title_cumulative, 'y': yaxis_title_cumulative},
+                                title=title_cumulative,
+                                color=val_cum,
+                                color_continuous_scale='plasma'
+                            )
+                            fig_cumulative.update_layout(
+                                title_x=title_x_cumulative,
+                                showlegend=False,
+                                height=400
+                            )
+                            fig_cumulative.update_traces(texttemplate='%{y:.1%}', textposition='outside')
+                            st.plotly_chart(fig_cumulative, use_container_width=True)
+                    
+                    with tab3:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.subheader("🔴 Modalités lignes")
+                            info_ligne = afc.row_topandas()
+                            
+                            row_graph = px.scatter(
+                                info_ligne, x="row_coord_dim1", y="row_coord_dim2",
+                                text=info_ligne.index,
+                                labels={"row_coord_dim1": xaxis_title_row, "row_coord_dim2": yaxis_title_row},
+                                title=title_row,
+                                color_discrete_sequence=['red']
+                            )
+                            
+                            # Configuration du graphique
+                            all_values = np.concatenate([
+                                info_ligne["row_coord_dim1"].values,
+                                info_ligne["row_coord_dim2"].values
+                            ])
+                            max_val = np.max(np.abs(all_values))
+                            axis_limit = max_val * 1.2
+                            
+                            row_graph.update_traces(textposition='top center', marker_size=10)
+                            row_graph.update_layout(
+                                title_x=title_x_row,
+                                xaxis=dict(range=[-axis_limit, axis_limit], zeroline=True, zerolinecolor="black"),
+                                yaxis=dict(range=[-axis_limit, axis_limit], zeroline=True, zerolinecolor="black", scaleanchor="x"),
+                                plot_bgcolor="white",
+                                height=500,
+                                showlegend=False
+                            )
+                            row_graph.add_hline(y=0, line_dash="solid", line_color="gray", line_width=1)
+                            row_graph.add_vline(x=0, line_dash="solid", line_color="gray", line_width=1)
+                            
+                            st.plotly_chart(row_graph, use_container_width=True)
+                        
+                        with col2:
+                            st.subheader("🔵 Modalités colonnes")
+                            info_col = afc.col_topandas()
+                            
+                            col_graph = px.scatter(
+                                info_col, x="col_coord_dim1", y="col_coord_dim2",
+                                text=info_col.index,
+                                labels={"col_coord_dim1": xaxis_title_col, "col_coord_dim2": yaxis_title_col},
+                                title=title_col,
+                                color_discrete_sequence=['blue']
+                            )
+                            
+                            # Configuration similaire
+                            all_values_col = np.concatenate([
+                                info_col["col_coord_dim1"].values,
+                                info_col["col_coord_dim2"].values
+                            ])
+                            max_val_col = np.max(np.abs(all_values_col))
+                            axis_limit_col = max_val_col * 1.2
+                            
+                            col_graph.update_traces(textposition='top center', marker_size=10)
+                            col_graph.update_layout(
+                                title_x=title_x_col,
+                                xaxis=dict(range=[-axis_limit_col, axis_limit_col], zeroline=True, zerolinecolor="black"),
+                                yaxis=dict(range=[-axis_limit_col, axis_limit_col], zeroline=True, zerolinecolor="black", scaleanchor="x"),
+                                plot_bgcolor="white",
+                                height=500,
+                                showlegend=False
+                            )
+                            col_graph.add_hline(y=0, line_dash="solid", line_color="gray", line_width=1)
+                            col_graph.add_vline(x=0, line_dash="solid", line_color="gray", line_width=1)
+                            
+                            st.plotly_chart(col_graph, use_container_width=True)
+                        
+                        # Graphique d'association combiné
+                        st.subheader("🎯 Association lignes-colonnes")
+                        
+                        map_info = pd.concat([info_ligne, info_col], axis=0)
+                        row_col = ['Modalité ligne'] * len(info_ligne) + ['Modalité colonne'] * len(info_col)
+                        
+                        coord_dim1 = list(info_ligne["row_coord_dim1"]) + list(info_col["col_coord_dim1"])
+                        coord_dim2 = list(info_ligne["row_coord_dim2"]) + list(info_col["col_coord_dim2"])
+                        
+                        map_df = pd.DataFrame({
+                            'Type': row_col,
+                            'coord_dim1': coord_dim1,
+                            'coord_dim2': coord_dim2,
+                            'Label': list(info_ligne.index) + list(info_col.index)
+                        })
+                        
+                        map_afc_graph = px.scatter(
+                            map_df, x="coord_dim1", y="coord_dim2",
+                            color="Type", text="Label",
+                            labels={"coord_dim1": xaxis_title_association, "coord_dim2": yaxis_title_association},
+                            title=title_association,
+                            color_discrete_map={"Modalité ligne": "red", "Modalité colonne": "blue"}
+                        )
+                        
+                        # Configuration du graphique combiné
+                        all_combined = np.concatenate([coord_dim1, coord_dim2])
+                        max_combined = np.max(np.abs(all_combined))
+                        axis_limit_combined = max_combined * 1.2
+                        
+                        map_afc_graph.update_traces(textposition='top center', marker_size=12)
+                        map_afc_graph.update_layout(
+                            title_x=title_x_association,
+                            xaxis=dict(range=[-axis_limit_combined, axis_limit_combined], zeroline=True, zerolinecolor="black"),
+                            yaxis=dict(range=[-axis_limit_combined, axis_limit_combined], zeroline=True, zerolinecolor="black", scaleanchor="x"),
+                            plot_bgcolor="white",
+                            height=600,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        map_afc_graph.add_hline(y=0, line_dash="solid", line_color="gray", line_width=1)
+                        map_afc_graph.add_vline(x=0, line_dash="solid", line_color="gray", line_width=1)
+                        
+                        st.plotly_chart(map_afc_graph, use_container_width=True)
+                    
+                    with tab4:
+                        st.subheader("📋 Contributions des modalités aux axes")
+                        
+                        contrib_col1, contrib_col2 = st.columns(2)
+                
 
+                        with contrib_col1:
+                            st.write("**Axe 1**")
+                            st.write("Contributions lignes - Axe 1")
+                            
+                            # Graphique 1 : Contributions à la dimension 1
+                            fig_contrib_row_1 = px.bar(
+                                info_ligne,
+                                y=info_ligne.index,
+                                x="row_contrib_dim1",
+                                labels={"row_contrib_dim1": yaxis_title_contrib1row, "y": xaxis_title_contrib1_row},
+                                title=title_contrib1_row,
+                                orientation="h",
+                                text="row_contrib_dim1"
+                            )
 
-        # Ajouter des informations d'aide en bas de page
-        with st.expander("À propos de l'Analyse Factorielle des Correspondances"):
-            st.write("""
-            L'Analyse Factorielle des Correspondances (AFC) est une méthode statistique qui permet d'étudier 
-            l'association entre deux variables qualitatives. Elle produit une représentation graphique qui 
-            facilite l'interprétation des relations entre les modalités des variables.
+                            # Personnaliser le graphique des contributions
+                            fig_contrib_row_1.update_traces(
+                                texttemplate='%{text:.1f}%',
+                                textposition="outside",
+                                textfont_size=12
+                            )
+
+                            fig_contrib_row_1.update_layout(
+                                title_x=title_x_contrib1_row,
+                                xaxis_title=yaxis_title_contrib1row,
+                                yaxis_title=xaxis_title_contrib1_row,
+                                width=800,
+                                height=500
+                            )
+
+                            st.plotly_chart(fig_contrib_row_1, use_container_width=True)
+                            
+                            st.write("Contributions colonnes - Axe 1")
+
+                            # Graphique 1 : Contributions à la dimension 1
+                            fig_contrib_col_1 = px.bar(
+                                info_col,
+                                y=info_col.index,
+                                x="col_contrib_dim1",
+                                labels={"col_contrib_dim1": "Contribution (%)", "y": "Modalités"},
+                                title=title_contrib1_col,
+                                orientation="h",
+                                text="col_contrib_dim1"
+                            )
+
+                            # Personnaliser le graphique des contributions
+                            fig_contrib_col_1.update_traces(
+                                texttemplate='%{text:.1f}%',
+                                textposition="outside",
+                                textfont_size=12
+                            )
+
+                            fig_contrib_col_1.update_layout(
+                                title_x=title_x_contrib1_col,
+                                xaxis_title=yaxis_title_contrib1_col,
+                                yaxis_title=xaxis_title_contrib1_col,
+                                width=800,
+                                height=500
+                            )
+
+                            st.plotly_chart(fig_contrib_col_1, use_container_width=True)
+                        
+                        with contrib_col2:
+                            st.write("**Axe 2**")
+                            st.write("Contributions lignes - Axe 2")
+                            # Graphique 1 : Contributions à la dimension 1
+                            fig_contrib_row_2 = px.bar(
+                                info_ligne,
+                                y=info_ligne.index,
+                                x="row_contrib_dim2",
+                                labels={"row_contrib_dim1": "Contribution (%)", "y": "Modalités"},
+                                title=title_contrib2_row,
+                                orientation="h",
+                                text="row_contrib_dim2"
+                            )
+
+                            # Personnaliser le graphique des contributions
+                            fig_contrib_row_2.update_traces(
+                                texttemplate='%{text:.1f}%',
+                                textposition="outside",
+                                textfont_size=12
+                            )
+
+                            fig_contrib_row_2.update_layout(
+                                title_x=title_x_contrib2_row,
+                                xaxis_title=yaxis_title_contrib2_row,
+                                yaxis_title=xaxis_title_contrib2_row,
+                                width=800,
+                                height=500
+                            )
+
+                            st.plotly_chart(fig_contrib_row_2, use_container_width=True)
+                            
+                            st.write("Contributions colonnes - Axe 2")
+                            fig_contrib_col_2 = px.bar(
+                                info_col,
+                                y=info_col.index,
+                                x="col_contrib_dim2",
+                                labels={"col_contrib_dim2": "Contribution (%)", "y": "Modalités"},
+                                title=title_contrib2_col,
+                                orientation="h",
+                                text="col_contrib_dim2"
+                            )
+
+                            # Personnaliser le graphique des contributions
+                            fig_contrib_col_2.update_traces(
+                                texttemplate='%{text:.1f}%',
+                                textposition="outside",
+                                textfont_size=12
+                            )
+
+                            fig_contrib_col_2.update_layout(
+                                title_x=title_x_contrib2_col,
+                                xaxis_title=yaxis_title_contrib2_col,
+                                yaxis_title=xaxis_title_contrib2_col,
+                                width=800,
+                                height=500
+                            )
+
+                            st.plotly_chart(fig_contrib_col_2, use_container_width=True)
+                    
+                    with tab5:
+                        st.subheader("🔥 Décomposition du Chi-2 et résidus")
+                        
+                        # Calculs
+                        contribkhi2 = ((df_cont.values - res.expected_freq)**2) / res.expected_freq
+                        frac_contrib = contribkhi2 / res.statistic
+                        df_contrib = pd.DataFrame(frac_contrib, index=df_cont.index, columns=df_cont.columns)
+                        
+                        residu_std = (df_cont.values - res.expected_freq) / np.sqrt(res.expected_freq)
+                        df_residu_std = pd.DataFrame(residu_std, index=df_cont.index, columns=df_cont.columns)
+                        
+                        chi2_col1, chi2_col2 = st.columns(2)
+                        
+                        with chi2_col1:
+                            st.write("**Contribution au Chi-2 (fraction)**")
+                            fig1, ax1 = plt.subplots(figsize=(10, 8))
+                            sns.heatmap(df_contrib, annot=True, fmt='.3f', cmap=cmap_chi2,
+                                    cbar=True, linewidths=0.5, ax=ax1)
+                            ax1.set_title(title_chi2)
+                            st.pyplot(fig1, use_container_width=True)
+                        
+                        with chi2_col2:
+                            st.write("**Résidus standardisés**")
+                            fig2, ax2 = plt.subplots(figsize=(10, 8))
+                            sns.heatmap(df_residu_std, annot=True, fmt='.2f',
+                                    cmap=cmap_residuals, center=0,
+                                    cbar=True, linewidths=0.5, ax=ax2)
+                            ax2.set_title(title_residuals)
+                            st.pyplot(fig2, use_container_width=True)
             
-            **Comment utiliser cet outil:**
-            1. Chargez un fichier de données (CSV ou Excel)
-            2. Sélectionnez deux variables à analyser
-            3. Cliquez sur "Exécuter l'analyse AFC"
-            4. Explorez les résultats dans les différents onglets
+            except Exception as e:
+                st.error(f"❌ Erreur lors de l'analyse: {str(e)}")
+                st.error("Vérifiez vos données et paramètres.")
+        
+        # Aide contextuelle
+        with st.expander("ℹ️ Guide d'interprétation des résultats"):
+            st.markdown("""
+            ### 📊 **Interprétation des résultats AFC**
             
-            **Interprétation des résultats:**
-            - Les modalités proches sur le graphique ont des profils similaires
-            - Les axes représentent les principales dimensions de variabilité des données
-            - Les contributions indiquent l'importance de chaque modalité dans la construction des axes
-            - Les résidus standardisés montrent les écarts à l'indépendance
+            **Test du Chi-2:**
+            - **p-value < 0.05** : Les variables sont significativement associées
+            - **p-value ≥ 0.05** : Pas d'association significative détectée
+            
+            **Graphiques des modalités:**
+            - 🔴 **Points rouges** : modalités de la première variable
+            - 🔵 **Points bleus** : modalités de la deuxième variable  
+            - **Distance entre points** : Plus ils sont proches, plus ils sont associés
+            - **Distance au centre** : Plus c'est éloigné, plus c'est caractéristique
+            
+            **Valeurs propres:**
+            - Indiquent la qualité de représentation de chaque axe
+            - Privilégier les premiers axes avec les valeurs les plus élevées
+            
+            **Contributions:**
+            - Montrent l'importance de chaque modalité dans la construction des axes
+            - Contribuions élevées = modalités qui "tirent" l'axe
+            
+            **Résidus standardisés:**
+            - Valeurs > 2 ou < -2 : écarts significatifs à l'indépendance
+            - Positifs : sur-représentation, Négatifs : sous-représentation
             """)
-
+        
+        st.success("🎉 Analyse AFC terminée ! Explorez les résultats dans les différents onglets.")
     def data_overview(df):
         st.header("Data Overview")
 
@@ -2940,6 +3400,7 @@ def add():
     def visualizations(df):
         """
         Fonction pour créer différents types de visualisations à partir d'un DataFrame
+        avec personnalisation des couleurs et titres
         """
         st.header("📈 Visualisations")
         
@@ -2947,26 +3408,86 @@ def add():
             st.warning("Le DataFrame est vide. Aucune visualisation disponible.")
             return
         
+        # Palette de couleurs prédéfinies
+        color_palettes = {
+            'Défaut': ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'],
+            'Viridis': px.colors.sequential.Viridis,
+            'Plasma': px.colors.sequential.Plasma,
+            'Blues': px.colors.sequential.Blues,
+            'Reds': px.colors.sequential.Reds,
+            'Greens': px.colors.sequential.Greens,
+            'Pastel': px.colors.qualitative.Pastel,
+            'Set1': px.colors.qualitative.Set1,
+            'Set2': px.colors.qualitative.Set2,
+            'Set3': px.colors.qualitative.Set3,
+            'Dark2': px.colors.qualitative.Dark2,
+            'Océan': ['#006994', '#13A5B7', '#26C9DE', '#B8E6F0'],
+            'Sunset': ['#FF6B35', '#F7931E', '#FFD23F', '#06FFA5'],
+            'Forest': ['#2D5016', '#4F7942', '#74A478', '#A8DADC']
+        }
+        
+        # Correspondance pour les colorscales (graphiques continus)
+        colorscale_mapping = {
+            'Défaut': 'viridis',
+            'Viridis': 'viridis',
+            'Plasma': 'plasma',
+            'Blues': 'blues',
+            'Reds': 'reds',
+            'Greens': 'greens',
+            'Pastel': 'viridis',
+            'Set1': 'viridis', 
+            'Set2': 'viridis',
+            'Set3': 'viridis',
+            'Dark2': 'viridis',
+            'Océan': 'teal',
+            'Sunset': 'sunset',
+            'Forest': 'greens'
+        }
+        
         # Section 1: Graphiques individuels
         st.subheader("Graphiques individuels")
-        selected_col = st.selectbox("Sélectionnez une colonne à visualiser:", options=df.columns)
+        
+        # Conteneurs pour organiser les contrôles
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            selected_col = st.selectbox("Sélectionnez une colonne à visualiser:", options=df.columns)
+        
+        with col2:
+            # Options de personnalisation dans un expander
+            with st.expander("🎨 Personnalisation"):
+                custom_title = st.text_input("Titre personnalisé (optionnel):", 
+                                        placeholder=f"Graphique de {selected_col if selected_col else '...'}")
+                color_palette = st.selectbox("Palette de couleurs:", options=list(color_palettes.keys()))
+                custom_color = st.color_picker("Couleur personnalisée:", value="#FF6B6B")
+                use_custom_color = st.checkbox("Utiliser couleur personnalisée")
 
         if selected_col and not df.empty:
             is_numeric = df[selected_col].dtype != 'object' and df[selected_col].dtype.name != 'category'
             unique_count = df[selected_col].nunique()
+            
+            # Déterminer les couleurs à utiliser
+            if use_custom_color:
+                colors = [custom_color]
+            else:
+                colors = color_palettes[color_palette]
 
-            if is_numeric and unique_count > 10:  # Heuristic: more than 10 unique values, treat as continuous
+            if is_numeric and unique_count > 10:  # Variable numérique continue
                 graph_type = st.selectbox(
                     "Type de graphique pour variable numérique:",
                     options=["Histogramme", "Box Plot", "KDE (Density)", "Violin Plot", "Cumulative Distribution"],
                     key="num_graph_type"
                 )
+                
+                # Titre par défaut ou personnalisé
+                default_title = f"Histogramme de {selected_col}" if graph_type == "Histogramme" else f"{graph_type} de {selected_col}"
+                title = custom_title if custom_title else default_title
 
                 if graph_type == "Histogramme":
                     nbins = st.slider("Nombre de bins:", min_value=5, max_value=100, value=20)
                     fig = px.histogram(df, x=selected_col, nbins=nbins,
-                                    title=f"Histogramme de {selected_col}",
-                                    color_discrete_sequence=['#FF6B6B'],
+                                    title=title,
+                                    color_discrete_sequence=colors,
                                     template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -2979,8 +3500,8 @@ def add():
                     st.plotly_chart(fig, use_container_width=True)
 
                 elif graph_type == "Box Plot":
-                    fig = px.box(df, x=selected_col, title=f"Box Plot de {selected_col}", 
-                                points='all', color_discrete_sequence=['#4ECDC4'],
+                    fig = px.box(df, x=selected_col, title=title, 
+                                points='all', color_discrete_sequence=colors,
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -2989,14 +3510,14 @@ def add():
                         title_font_size=16,
                         title_x=0.5
                     )
-                    fig.update_traces(marker=dict(color='#45B7D1', size=4, opacity=0.6))
+                    fig.update_traces(marker=dict(color=colors[0] if colors else '#45B7D1', size=4, opacity=0.6))
                     st.plotly_chart(fig, use_container_width=True)
 
                 elif graph_type == "KDE (Density)":
-                    fig = px.density_contour(df, x=selected_col, title=f"KDE de {selected_col}",
+                    fig = px.density_contour(df, x=selected_col, title=title,
                                             template='plotly_white')
                     fig.update_traces(contours_coloring="fill", contours_showlabels=True,
-                                    colorscale='Viridis')
+                                    colorscale=colorscale_mapping[color_palette] if not use_custom_color else [[0, 'white'], [1, custom_color]])
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
                         paper_bgcolor='rgba(0,0,0,0)',
@@ -3008,8 +3529,8 @@ def add():
 
                 elif graph_type == "Violin Plot":
                     fig = px.violin(df, y=selected_col, box=True, points='all',
-                                    title=f"Violin Plot de {selected_col}",
-                                    color_discrete_sequence=['#96CEB4'],
+                                    title=title,
+                                    color_discrete_sequence=colors,
                                     template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3018,12 +3539,12 @@ def add():
                         title_font_size=16,
                         title_x=0.5
                     )
-                    fig.update_traces(points_marker=dict(color='#F38BA8', size=3, opacity=0.7))
+                    fig.update_traces(points_marker=dict(color=colors[0] if colors else '#F38BA8', size=3, opacity=0.7))
                     st.plotly_chart(fig, use_container_width=True)
 
                 elif graph_type == "Cumulative Distribution":
-                    fig = px.ecdf(df, x=selected_col, title=f"Distribution cumulative de {selected_col}",
-                                color_discrete_sequence=['#A8E6CF'],
+                    fig = px.ecdf(df, x=selected_col, title=title,
+                                color_discrete_sequence=colors,
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3035,12 +3556,16 @@ def add():
                     fig.update_traces(line=dict(width=3))
                     st.plotly_chart(fig, use_container_width=True)
 
-            else:  # Treat as categorical
+            else:  # Variable catégorielle
                 graph_type = st.selectbox(
                     "Type de graphique pour variable catégorielle:",
                     options=["Bar Chart", "Pie Chart"],
                     key="cat_graph_type"
                 )
+                
+                # Titre par défaut ou personnalisé
+                default_title = f"{graph_type} de {selected_col}"
+                title = custom_title if custom_title else default_title
 
                 value_counts = df[selected_col].value_counts()
 
@@ -3048,14 +3573,14 @@ def add():
                     sort_option = st.checkbox("Trier par fréquence", value=True)
                     if sort_option:
                         fig = px.bar(x=value_counts.index, y=value_counts.values,
-                                    title=f"Bar Chart de {selected_col}",
+                                    title=title,
                                     labels={'x': selected_col, 'y': 'Count'},
                                     color=value_counts.values,
-                                    color_continuous_scale='Plasma',
+                                    color_continuous_scale=colorscale_mapping[color_palette] if not use_custom_color else [[0, 'white'], [1, custom_color]],
                                     template='plotly_white')
                     else:
-                        fig = px.bar(df, x=selected_col, title=f"Bar Chart de {selected_col}",
-                                    color_discrete_sequence=['#FFD93D'],
+                        fig = px.bar(df, x=selected_col, title=title,
+                                    color_discrete_sequence=colors,
                                     template='plotly_white')
                     
                     fig.update_layout(
@@ -3076,8 +3601,8 @@ def add():
                         value_counts = value_counts.nlargest(10)
 
                     fig = px.pie(values=value_counts.values, names=value_counts.index,
-                                title=f"Pie Chart de {selected_col}",
-                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                title=title,
+                                color_discrete_sequence=colors,
                                 template='plotly_white')
                     fig.update_layout(
                         font=dict(family="Arial, sans-serif", size=12),
@@ -3092,7 +3617,6 @@ def add():
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
-
             with st.expander("Statistiques descriptives"):
                 if is_numeric:
                     st.write(df[selected_col].describe())
@@ -3106,27 +3630,46 @@ def add():
         # Section 2: Graphiques bidimensionnels
         st.subheader("Graphiques bidimensionnels")
         
-        ch = st.columns(3)  # Ajout d'une colonne pour le choix du type de graphique
-        x_col = ch[0].selectbox(label='X_colonne', options=df.columns)
-        y_col = ch[1].selectbox(label='Y_colonne', options=df.columns)
+        # Organisation des contrôles
+        control_cols = st.columns([1, 1, 1, 1])
+        x_col = control_cols[0].selectbox(label='X_colonne', options=df.columns)
+        y_col = control_cols[1].selectbox(label='Y_colonne', options=df.columns)
+        
+        # Personnalisation pour graphiques bidimensionnels
+        with control_cols[3]:
+            with st.expander("🎨 Style"):
+                custom_title_2d = st.text_input("Titre personnalisé:", 
+                                            placeholder=f"{y_col} vs {x_col}" if x_col and y_col else "...")
+                color_palette_2d = st.selectbox("Palette:", options=list(color_palettes.keys()), key="palette_2d")
+                custom_color_2d = st.color_picker("Couleur:", value="#FF6B6B", key="color_2d")
+                use_custom_color_2d = st.checkbox("Couleur personnalisée", key="custom_2d")
 
         # Vérifier les types de données pour proposer des graphiques appropriés
         if x_col and y_col and not df.empty:
             x_is_object = df[x_col].dtype == 'object' or df[x_col].dtype.name == 'category' or df[x_col].nunique() <= 10
             y_is_object = df[y_col].dtype == 'object' or df[y_col].dtype.name == 'category' or df[y_col].nunique() <= 10
+            
+            # Déterminer les couleurs pour graphiques 2D
+            if use_custom_color_2d:
+                colors_2d = [custom_color_2d]
+            else:
+                colors_2d = color_palettes[color_palette_2d]
 
             # Proposer différents types de graphiques selon les types de données
             if x_is_object and y_is_object:
-                # Les deux sont catégorielles - proposer des graphiques adaptés
-                graph_type = ch[2].selectbox(
+                # Les deux sont catégorielles
+                graph_type = control_cols[2].selectbox(
                     label='Type de graphique',
                     options=['Bar Chart', 'Count Plot', 'Heatmap'],
                     key='cat_cat'
                 )
+                
+                default_title_2d = f"{graph_type} of {x_col} by {y_col}"
+                title_2d = custom_title_2d if custom_title_2d else default_title_2d
 
                 if graph_type == 'Bar Chart':
-                    fig = px.bar(df, x=x_col, color=y_col, title=f"Bar Chart of {x_col} by {y_col}",
-                                color_discrete_sequence=px.colors.qualitative.Pastel,
+                    fig = px.bar(df, x=x_col, color=y_col, title=title_2d,
+                                color_discrete_sequence=colors_2d,
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3136,12 +3679,12 @@ def add():
                         title_x=0.5
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Count Plot':
-                    # Créer un tableau croisé pour le countplot
                     cross_tab = pd.crosstab(df[x_col], df[y_col])
                     fig = px.imshow(cross_tab, text_auto=True, aspect="auto",
-                                    title=f"Count Plot of {x_col} vs {y_col}",
-                                    color_continuous_scale='Blues',
+                                    title=title_2d,
+                                    color_continuous_scale=colorscale_mapping[color_palette_2d] if not use_custom_color_2d else [[0, 'white'], [1, custom_color_2d]],
                                     template='plotly_white')
                     fig.update_layout(
                         font=dict(family="Arial, sans-serif", size=12),
@@ -3152,12 +3695,12 @@ def add():
                         hovertemplate='<b>%{x}</b> & <b>%{y}</b><br>Count: %{z}<extra></extra>'
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Heatmap':
-                    # Normaliser le tableau croisé pour avoir des pourcentages
                     cross_tab_norm = pd.crosstab(df[x_col], df[y_col], normalize='index')
                     fig = px.imshow(cross_tab_norm, text_auto='.1%', aspect="auto",
-                                    color_continuous_scale='RdYlBu_r',
-                                    title=f"Heatmap of {x_col} vs {y_col} (% par ligne)",
+                                    color_continuous_scale=colorscale_mapping[color_palette_2d] if not use_custom_color_2d else [[0, 'white'], [1, custom_color_2d]],
+                                    title=title_2d,
                                     template='plotly_white')
                     fig.update_layout(
                         font=dict(family="Arial, sans-serif", size=12),
@@ -3174,17 +3717,20 @@ def add():
                 cat_col = x_col if x_is_object else y_col
                 num_col = y_col if x_is_object else x_col
 
-                graph_type = ch[2].selectbox(
+                graph_type = control_cols[2].selectbox(
                     label='Type de graphique',
                     options=['Box Plot', 'Violin Plot', 'Bar Chart', 'Swarm Plot'],
                     key='cat_num'
                 )
+                
+                default_title_2d = f"{graph_type} of {num_col} by {cat_col}"
+                title_2d = custom_title_2d if custom_title_2d else default_title_2d
 
                 if graph_type == 'Box Plot':
                     fig = px.box(df, x=cat_col, y=num_col,
-                                title=f"Box Plot of {num_col} by {cat_col}",
+                                title=title_2d,
                                 color=cat_col,
-                                color_discrete_sequence=px.colors.qualitative.Pastel,
+                                color_discrete_sequence=colors_2d,
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3195,11 +3741,12 @@ def add():
                         showlegend=False
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Violin Plot':
                     fig = px.violin(df, x=cat_col, y=num_col, box=True,
-                                    title=f"Violin Plot of {num_col} by {cat_col}",
+                                    title=title_2d,
                                     color=cat_col,
-                                    color_discrete_sequence=px.colors.qualitative.Set2,
+                                    color_discrete_sequence=colors_2d,
                                     template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3210,13 +3757,13 @@ def add():
                         showlegend=False
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Bar Chart':
-                    # Calculer la moyenne par catégorie
                     agg_df = df.groupby(cat_col)[num_col].mean().reset_index()
                     fig = px.bar(agg_df, x=cat_col, y=num_col,
-                                title=f"Average {num_col} by {cat_col}",
+                                title=title_2d,
                                 color=num_col,
-                                color_continuous_scale='Cividis',
+                                color_continuous_scale=colorscale_mapping[color_palette_2d] if not use_custom_color_2d else [[0, 'white'], [1, custom_color_2d]],
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3232,12 +3779,12 @@ def add():
                         marker_line_width=1
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Swarm Plot':
-                    # Pour un swarm plot, utiliser Plotly Strip Plot comme alternative
                     fig = px.strip(df, x=cat_col, y=num_col,
-                                title=f"Swarm Plot of {num_col} by {cat_col}",
+                                title=title_2d,
                                 color=cat_col,
-                                color_discrete_sequence=px.colors.qualitative.Dark2,
+                                color_discrete_sequence=colors_2d,
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3252,16 +3799,19 @@ def add():
 
             else:
                 # Les deux sont numériques
-                graph_type = ch[2].selectbox(
+                graph_type = control_cols[2].selectbox(
                     label='Type de graphique',
                     options=['Scatter Plot', 'Line Plot', 'Hexbin', 'Density Contour', 'Bubble Chart'],
                     key='num_num'
                 )
+                
+                default_title_2d = f"{graph_type} of {y_col} vs {x_col}"
+                title_2d = custom_title_2d if custom_title_2d else default_title_2d
 
                 if graph_type == 'Scatter Plot':
                     fig = px.scatter(df, x=x_col, y=y_col,
-                                    title=f"Scatter Plot of {y_col} vs {x_col}",
-                                    color_discrete_sequence=['#FF6B6B'],
+                                    title=title_2d,
+                                    color_discrete_sequence=colors_2d,
                                     template='plotly_white',
                                     opacity=0.7)
                     fig.update_layout(
@@ -3273,11 +3823,11 @@ def add():
                     )
                     fig.update_traces(marker=dict(size=8, line=dict(width=1, color='white')))
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Line Plot':
-                    # Trier par x pour avoir une ligne cohérente
                     sorted_df = df.sort_values(by=x_col)
                     fig = px.line(sorted_df, x=x_col, y=y_col,
-                                title=f"Line Plot of {y_col} vs {x_col}",
+                                title=title_2d,
                                 template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3287,14 +3837,15 @@ def add():
                         title_x=0.5
                     )
                     fig.update_traces(
-                        line=dict(color='#4ECDC4', width=3),
-                        marker=dict(size=6, color='#FF6B6B', line=dict(width=1, color='white'))
+                        line=dict(color=colors_2d[0] if colors_2d else '#4ECDC4', width=3),
+                        marker=dict(size=6, color=colors_2d[0] if colors_2d else '#FF6B6B', line=dict(width=1, color='white'))
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Hexbin':
                     fig = px.density_heatmap(df, x=x_col, y=y_col, nbinsx=20, nbinsy=20,
-                                            title=f"Hexbin Plot of {y_col} vs {x_col}",
-                                            color_continuous_scale='Hot',
+                                            title=title_2d,
+                                            color_continuous_scale=colorscale_mapping[color_palette_2d] if not use_custom_color_2d else [[0, 'white'], [1, custom_color_2d]],
                                             template='plotly_white')
                     fig.update_layout(
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -3304,22 +3855,42 @@ def add():
                         title_x=0.5
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Density Contour':
                     fig = px.density_contour(df, x=x_col, y=y_col,
-                                            title=f"Density Contour of {y_col} vs {x_col}")
-                    st.plotly_chart(fig)
+                                            title=title_2d,
+                                            template='plotly_white')
+                    fig.update_traces(colorscale=colorscale_mapping[color_palette_2d] if not use_custom_color_2d else [[0, 'white'], [1, custom_color_2d]])
+                    fig.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(family="Arial, sans-serif", size=12),
+                        title_font_size=16,
+                        title_x=0.5
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    
                 elif graph_type == 'Bubble Chart':
-                    # Utiliser une troisième variable numérique pour la taille des bulles si disponible
                     num_cols = df.select_dtypes(include=['float', 'int']).columns
                     if len(num_cols) > 2 and set([x_col, y_col]).issubset(set(num_cols)):
                         size_col = [col for col in num_cols if col not in [x_col, y_col]][0]
                         fig = px.scatter(df, x=x_col, y=y_col, size=size_col,
-                                        title=f"Bubble Chart of {y_col} vs {x_col} (size: {size_col})")
+                                        title=title_2d,
+                                        color_discrete_sequence=colors_2d,
+                                        template='plotly_white')
                     else:
-                        # Si pas de 3ème variable numérique, utiliser une constante
                         fig = px.scatter(df, x=x_col, y=y_col, size_max=15,
-                                        title=f"Bubble Chart of {y_col} vs {x_col}")
-                    st.plotly_chart(fig)
+                                        title=title_2d,
+                                        color_discrete_sequence=colors_2d,
+                                        template='plotly_white')
+                    fig.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(family="Arial, sans-serif", size=12),
+                        title_font_size=16,
+                        title_x=0.5
+                    )
+                    st.plotly_chart(fig, use_container_width=True)                
 
     def correlation_analysis(df):
         st.header("Correlation Analysis")
